@@ -185,7 +185,6 @@
       });
     }).then(function (response) { return response.json(); }).then(function (payload) {
       if (!payload || !payload.document) return;
-      payload.popupId = payload.popupId;
       showPayload(payload, null);
     }).catch(function () {});
   }

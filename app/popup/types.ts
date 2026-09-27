@@ -3,6 +3,7 @@ export const SCHEMA_VERSION = 1;
 export const NAMESPACE = "leaf_popups";
 export const CUSTOMER_STATE_KEY = "state";
 export const SHOP_MANIFEST_KEY = "manifest";
+// Theme-editor deep links use the Liquid block filename, not the extension handle.
 export const EMBED_HANDLE = "leaf-popups";
 export const PROXY_SUBPATH = "/apps/leaf-popups";
 

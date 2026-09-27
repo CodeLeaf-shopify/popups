@@ -21,9 +21,10 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>Create storefront popups that convert</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Leaf Popups helps Shopify merchants design, target, and publish
+          campaigns without editing their theme.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -39,16 +40,16 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Flexible campaigns.</strong> Start with email capture,
+            discounts, exit intent, or an announcement bar.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Accurate previews.</strong> Design with the same renderer
+            that runs on the storefront.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>One app embed.</strong> Publish and pause campaigns without
+            adding a new theme block each time.
           </li>
         </ul>
       </div>
