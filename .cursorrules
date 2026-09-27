@@ -1,0 +1,39 @@
+# Context & Boundaries
+- Shopify React Router app (`react-router` + `@shopify/shopify-app-react-router`). Tech stack: React, Node.js, Prisma, Shopify GraphQL Admin API.
+- NEVER use the REST API.
+- Do NOT hallucinate GraphQL fields; rely strictly on Shopify's GraphQL schemas.
+- For Shopify API/platform work, follow AGENTS.md and the Shopify AI Toolkit.
+
+# Admin UI & Styling
+- Admin UI must exclusively use Polaris web components (`s-page`, `s-section`, `s-button`, `s-app-nav`, etc.).
+- NEVER use the `@shopify/polaris` React package.
+- NEVER use Tailwind CSS or custom admin stylesheets.
+- App shell: `AppProvider` from `@shopify/shopify-app-react-router/react`; navigation via Polaris web components (`s-app-nav`, `s-link`), not App Bridge `NavMenu`/`TitleBar`.
+
+# Editor State Management (CRITICAL)
+- Keep three concerns separate in editor state: Document (normalized), Behavior, and Editor Session (plus `meta` for id/name/status).
+- The Document MUST be a normalized flat map of nodes (keyed by id, with `parentId` and ordered `childIds`), NOT a deeply nested tree.
+- Validate all drag-and-drop operations through the containment registry (`CONTAINMENT` / `canContain` in `app/popup/types.ts`).
+- Layout model is nested flow (stacks, columns, padding). NEVER use absolute x/y coordinates for document layout.
+
+# Live Preview & Renderer
+- The preview is a sandboxed iframe. Do NOT use Polaris components inside it.
+- The renderer mounts inside a closed shadow root with its own isolated tokens and CSS.
+- Drag-and-drop hit targets and logic happen INSIDE the iframe, emitting commands to the parent.
+- The storefront and the iframe preview MUST share the exact same renderer (`extensions/leaf-popups-embed/assets/renderer.js`) and compiled document schema.
+
+# Data Storage Split
+- Prisma: Merchant designs, draft documents, admin sessions, publication revisions. NEVER store customer engagement data here.
+- Shop Metafield (`leaf_popups.manifest`): The published campaign index.
+- Customer Metafield (`leaf_popups.state`): Frequency, email consent, and unique discount codes.
+- Shopify Files: Compiled popup payloads uploaded via `fileCreate` (served from Shopify CDN URLs in the manifest).
+
+# Storefront Integration (Theme App Extensions)
+- Use exactly ONE App Embed block targeting the page body.
+- NEVER use section app blocks or script tags.
+- The embed reads the Shop manifest directly from Liquid to determine if a popup should render.
+- The embed fetches the compiled JSON payload from the Shopify Files CDN URL.
+
+# React Router & Authentication
+- Admin routes (`loader` / `action`): Use `const { admin } = await authenticate.admin(request);` to mutate Prisma, upload to Files, or set Shop Metafields.
+- App Proxy routes (Storefront submissions): Use `authenticate.public.appProxy(request)`, then the offline Admin GraphQL client from that context to update Customer Metafields. NEVER use `authenticate.admin` in app proxy routes.
