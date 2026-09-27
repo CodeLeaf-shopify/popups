@@ -11,6 +11,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // If this webhook already ran, the session may have been deleted previously.
   if (session) {
     await db.session.deleteMany({ where: { shop } });
+    await db.popup.deleteMany({ where: { shop } });
+    await db.publication.deleteMany({ where: { shop } });
   }
 
   return new Response();

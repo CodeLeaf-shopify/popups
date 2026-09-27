@@ -1,0 +1,24 @@
+{% comment %}
+  Site-wide popup embed. Designs are not inlined; this prints the shop manifest
+  and, for a logged-in customer, their leaf_popups.state metafield.
+{% endcomment %}
+<script type="application/json" id="leaf-popups-boot">
+  {
+    "manifest": {{ shop.metafields.leaf_popups.manifest.value | json }},
+    "customerState": {% if customer %}{{ customer.metafields.leaf_popups.state.value | json }}{% else %}null{% endif %},
+    "loggedIn": {% if customer %}true{% else %}false{% endif %},
+    "template": {{ template.name | json }},
+    "path": {{ request.path | json }},
+    "proxy": "/apps/leaf-popups",
+    "renderer": {{ 'renderer.js' | asset_url | json }}
+  }
+</script>
+
+{% schema %}
+{
+  "name": "Leaf Popups",
+  "target": "body",
+  "javascript": "embed.js",
+  "settings": []
+}
+{% endschema %}
