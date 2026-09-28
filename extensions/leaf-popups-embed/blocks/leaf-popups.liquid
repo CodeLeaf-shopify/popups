@@ -13,12 +13,12 @@
     "renderer": {{ 'renderer.js' | asset_url | json }}
   }
 </script>
+<script src="{{ 'embed.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
   "name": "Leaf Popups",
   "target": "body",
-  "javascript": "embed.js",
   "settings": []
 }
 {% endschema %}

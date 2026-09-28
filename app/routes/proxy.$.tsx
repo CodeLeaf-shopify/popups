@@ -29,6 +29,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!context) return json({ ok: false, error: "App proxy is not authenticated." }, 401);
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/$/, "");
+
+  if (path.endsWith("/manifest")) {
+    const publication = await prisma.publication.findUnique({
+      where: { shop: context.session.shop },
+      select: { manifest: true },
+    });
+    if (!publication?.manifest) return json({ revision: "", campaigns: [] });
+    try {
+      return json(JSON.parse(publication.manifest));
+    } catch {
+      return json({ ok: false, error: "Stored manifest is invalid." }, 500);
+    }
+  }
+
   if (!path.endsWith("/draft")) return json({ ok: false, error: "Not found." }, 404);
   const token = url.searchParams.get("token") ?? "";
   const claims = verifyPreviewToken(token, context.session.shop);

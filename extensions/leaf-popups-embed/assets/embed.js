@@ -1,6 +1,7 @@
 (function () {
   var STORAGE_KEY = "leaf_popups_state";
   var boot = null;
+  var running = false;
 
   function emptyState() {
     return { popups: {}, codes: {} };
@@ -86,6 +87,8 @@
 
   function host() {
     var element = document.createElement("div");
+    element.setAttribute("data-leaf-popups-root", "");
+    element.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:2147483646;pointer-events:none;";
     document.body.appendChild(element);
     return element;
   }
@@ -174,8 +177,11 @@
       if (!response.ok) throw new Error("Popup file request failed.");
       return response.json();
     }).then(function (payload) {
+      if (typeof console !== "undefined") console.info("[Leaf Popups] showing", campaign.id, campaign.kind);
       showPayload(payload, campaign);
-    }).catch(function () {});
+    }).catch(function (error) {
+      if (typeof console !== "undefined") console.warn("[Leaf Popups]", error);
+    });
   }
 
   function preview(token) {
@@ -183,40 +189,110 @@
       return fetch(boot.proxy + "/draft?token=" + encodeURIComponent(token), {
         headers: { Accept: "application/json" },
       });
-    }).then(function (response) { return response.json(); }).then(function (payload) {
-      if (!payload || !payload.document) return;
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Draft preview request failed (" + response.status + ").");
+      return response.json();
+    }).then(function (payload) {
+      if (!payload || !payload.document) throw new Error("Draft preview returned no document.");
       showPayload(payload, null);
-    }).catch(function () {});
+    }).catch(function (error) {
+      if (typeof console !== "undefined") console.warn("[Leaf Popups]", error);
+    });
+  }
+
+  function normalizeManifest(value) {
+    if (!value) return null;
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value);
+      } catch (error) {
+        return null;
+      }
+    }
+    if (typeof value !== "object") return null;
+    if (!Array.isArray(value.campaigns)) value.campaigns = [];
+    return value;
+  }
+
+  function loadManifest() {
+    var local = normalizeManifest(boot.manifest);
+    if (local && local.campaigns.length) return Promise.resolve(local);
+    return fetch(boot.proxy + "/manifest", { headers: { Accept: "application/json" } })
+      .then(function (response) {
+        if (!response.ok) throw new Error("Manifest proxy failed (" + response.status + ").");
+        return response.json();
+      })
+      .then(function (remote) {
+        var normalized = normalizeManifest(remote);
+        if (!normalized) throw new Error("Manifest proxy returned an invalid payload.");
+        return normalized;
+      });
   }
 
   function start() {
     var bootEl = document.getElementById("leaf-popups-boot");
-    if (!bootEl || !bootEl.textContent) return;
+    if (!bootEl || !bootEl.textContent || running) return;
+    if (bootEl.getAttribute("data-leaf-started") === "1") return;
     try {
       boot = JSON.parse(bootEl.textContent);
     } catch (error) {
+      if (typeof console !== "undefined") console.warn("[Leaf Popups] Invalid boot payload.", error);
       return;
     }
+    bootEl.setAttribute("data-leaf-started", "1");
+    running = true;
+
     var params = new URLSearchParams(window.location.search);
     var token = params.get("leaf_preview");
     if (token) {
       preview(token);
       return;
     }
-    var manifest = boot.manifest;
-    var campaigns = manifest && Array.isArray(manifest.campaigns) ? manifest.campaigns : [];
-    var state = mergedState();
-    var matched = campaigns.filter(function (campaign) { return eligible(campaign, state); });
-    matched.sort(function (left, right) { return (right.priority || 0) - (left.priority || 0); });
-    var modal = matched.find(function (campaign) { return campaign.kind === "modal"; });
-    var bar = matched.find(function (campaign) { return campaign.kind === "bar"; });
-    if (!modal && !bar) return;
-    loadRenderer().then(function () {
-      if (bar) showCampaign(bar);
-      if (modal) showCampaign(modal);
-    }).catch(function () {});
+
+    loadManifest()
+      .then(function (manifest) {
+        boot.manifest = manifest;
+        var campaigns = manifest.campaigns;
+        var state = mergedState();
+        var matched = campaigns.filter(function (campaign) { return eligible(campaign, state); });
+        matched.sort(function (left, right) { return (right.priority || 0) - (left.priority || 0); });
+        var modal = matched.find(function (campaign) { return campaign.kind === "modal"; });
+        var bar = matched.find(function (campaign) { return campaign.kind === "bar"; });
+        if (!modal && !bar) {
+          running = false;
+          if (typeof console !== "undefined") {
+            console.info("[Leaf Popups] No eligible campaigns.", {
+              total: campaigns.length,
+              path: boot.path,
+              template: boot.template,
+              device: device(),
+            });
+          }
+          return null;
+        }
+        return loadRenderer().then(function () {
+          if (bar) showCampaign(bar);
+          if (modal) showCampaign(modal);
+        });
+      })
+      .catch(function (error) {
+        running = false;
+        if (typeof console !== "undefined") console.warn("[Leaf Popups]", error);
+      });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
-  else start();
+  function arm() {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+    else start();
+  }
+
+  arm();
+  document.addEventListener("shopify:section:load", start);
+  if (typeof MutationObserver === "function") {
+    var observer = new MutationObserver(function () {
+      var bootEl = document.getElementById("leaf-popups-boot");
+      if (bootEl && bootEl.getAttribute("data-leaf-started") !== "1") start();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
 })();

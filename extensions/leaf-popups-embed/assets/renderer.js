@@ -89,11 +89,12 @@
       shadow.replaceChildren();
       var style = document.createElement("style");
       style.textContent = [
-        ":host { all: initial; }",
+        /* all:initial alone collapses the host to 0x0 once children are position:fixed. */
+        ":host { all: initial; display: block !important; position: fixed !important; inset: 0 !important; width: 100% !important; height: 100% !important; z-index: 2147483646 !important; pointer-events: none !important; }",
         "* { box-sizing: border-box; }",
-        ".overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2147483646; }",
-        ".bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2147483646; }",
-        ".panel { position: relative; max-width: calc(100% - 32px); }",
+        ".overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2147483646; pointer-events: auto; }",
+        ".bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2147483646; pointer-events: auto; }",
+        ".panel { position: relative; max-width: calc(100% - 32px); pointer-events: auto; }",
         ".node { position: relative; }",
         ".node.selected { outline: 2px solid #2c6ecb; outline-offset: 2px; }",
         ".node.drop { outline: 2px dashed #2c6ecb; }",
