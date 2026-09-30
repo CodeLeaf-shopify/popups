@@ -3,16 +3,24 @@ import {
   type Behavior,
   type EditorDocument,
   type EditorNode,
-  type PopupKind,
   type Tokens,
 } from "./types";
 
+export type TemplateId = "blank" | "email" | "discount" | "exit" | "announcement";
+
 export type PopupDraft = {
   name: string;
-  kind: PopupKind;
+  template: TemplateId;
   document: EditorDocument;
   behavior: Behavior;
 };
+
+export const TEMPLATES: { id: Exclude<TemplateId, "blank">; label: string; detail: string }[] = [
+  { id: "email", label: "Email capture", detail: "Modal with a signup form" },
+  { id: "discount", label: "Discount reveal", detail: "Modal with a discount code" },
+  { id: "exit", label: "Exit intent", detail: "Modal that waits for exit" },
+  { id: "announcement", label: "Announcement bar", detail: "Bar across the top of the page" },
+];
 
 function id(): string {
   return crypto.randomUUID();
@@ -48,7 +56,7 @@ function documentFrom(tokens: Partial<Tokens>, root: EditorNode, rest: EditorNod
   return { schemaVersion: SCHEMA_VERSION, rootId: root.id, tokens, nodes };
 }
 
-function baseBehavior(goal: Behavior["goal"], presentation: Behavior["presentation"]): Behavior {
+function baseBehavior(presentation: Behavior["presentation"]): Behavior {
   return {
     presentation,
     barPosition: "top",
@@ -62,7 +70,6 @@ function baseBehavior(goal: Behavior["goal"], presentation: Behavior["presentati
       templates: [],
       hideForLoggedIn: false,
     },
-    goal,
     priority: 0,
     discount: null,
   };
@@ -89,8 +96,24 @@ function modalShell(
   return documentFrom(tokens, all[0], [...all.slice(1), ...nested]);
 }
 
-export function createPreset(kind: PopupKind): PopupDraft {
-  if (kind === "announcement") {
+export function createFromTemplate(template: TemplateId): PopupDraft {
+  if (template === "blank") {
+    const root = node("stack", null, "Popup", {}, {
+      direction: "column",
+      gap: 16,
+      align: "stretch",
+      padding: 28,
+    });
+    const all = attach(root, [node("close", root.id, "Close")]);
+    return {
+      name: "Untitled popup",
+      template,
+      document: documentFrom({}, all[0], all.slice(1)),
+      behavior: baseBehavior("modal"),
+    };
+  }
+
+  if (template === "announcement") {
     const tokens: Partial<Tokens> = { background: "#111111", text: "#ffffff", accent: "#ffffff" };
     const root = node("stack", null, "Bar", {}, {
       direction: "row",
@@ -106,18 +129,18 @@ export function createPreset(kind: PopupKind): PopupDraft {
     const all = attach(root, [copy, button]);
     return {
       name: "Announcement bar",
-      kind,
+      template,
       document: documentFrom(tokens, all[0], all.slice(1)),
       behavior: {
-        ...baseBehavior("none", "bar"),
+        ...baseBehavior("bar"),
         trigger: { type: "immediate" },
         frequency: { type: "always" },
       },
     };
   }
 
-  if (kind === "discount") {
-    const behavior = baseBehavior("discount", "modal");
+  if (template === "discount") {
+    const behavior = baseBehavior("modal");
     behavior.trigger = { type: "delay", seconds: 3 };
     behavior.discount = {
       mode: "shared",
@@ -129,7 +152,7 @@ export function createPreset(kind: PopupKind): PopupDraft {
     const button = node("button", null, "Button", { label: "Shop the sale", href: "/collections/all" });
     return {
       name: "Discount reveal",
-      kind,
+      template,
       document: modalShell({}, "Take 10% off", "Use this code at checkout.", [coupon, button]),
       behavior,
     };
@@ -143,21 +166,21 @@ export function createPreset(kind: PopupKind): PopupDraft {
   });
   const submit = node("button", form.id, "Submit", { label: "Get the offer", href: "" });
   form.childIds = [field.id, submit.id];
-  const title = kind === "exit" ? "Wait — here's 10% off" : "Join the list";
+  const title = template === "exit" ? "Wait — here's 10% off" : "Join the list";
   const body =
-    kind === "exit"
+    template === "exit"
       ? "Leave your email and we'll send the code."
       : "Be first to hear about new drops and private offers.";
-  const behavior = baseBehavior("email", "modal");
-  behavior.trigger = kind === "exit" ? { type: "exit" } : { type: "delay", seconds: 5 };
+  const behavior = baseBehavior("modal");
+  behavior.trigger = template === "exit" ? { type: "exit" } : { type: "delay", seconds: 5 };
   return {
-    name: kind === "exit" ? "Exit intent" : "Email capture",
-    kind,
+    name: template === "exit" ? "Exit intent" : "Email capture",
+    template,
     document: modalShell({}, title, body, [form], [field, submit]),
     behavior,
   };
 }
 
-export function isPopupKind(value: unknown): value is PopupKind {
-  return value === "email" || value === "discount" || value === "exit" || value === "announcement";
+export function isTemplateId(value: unknown): value is TemplateId {
+  return value === "blank" || TEMPLATES.some((template) => template.id === value);
 }

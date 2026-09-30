@@ -114,7 +114,7 @@ export async function submitPopup(
   const now = new Date().toISOString();
   const current = await readCustomerState(admin, customerId);
   let code = current.codes[popup.id];
-  if (behavior.goal === "discount" && behavior.discount?.mode === "unique" && !code) {
+  if (behavior.discount?.mode === "unique" && !code) {
     code = discountCode();
     await createSharedDiscount(
       admin,
@@ -123,7 +123,7 @@ export async function submitPopup(
       behavior.discount.percentage,
     );
   }
-  if (behavior.goal === "discount" && behavior.discount?.mode === "shared") {
+  if (behavior.discount?.mode === "shared") {
     code = behavior.discount.code ?? code;
   }
 

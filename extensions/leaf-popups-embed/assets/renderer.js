@@ -15,8 +15,7 @@
     close: [],
   };
 
-  function canContain(parent, child, goal) {
-    if (child === "coupon" && goal !== "discount") return false;
+  function canContain(parent, child) {
     return (CONTAINMENT[parent] || []).indexOf(child) !== -1;
   }
 
@@ -81,10 +80,6 @@
     var moved = false;
     var startX = 0;
     var startY = 0;
-
-    function goal() {
-      return current && current.behavior ? current.behavior.goal : "none";
-    }
 
     function render() {
       shadow.replaceChildren();
@@ -565,13 +560,13 @@
         if (containsNode(dragged, targetId)) continue;
         var target = findNode(current.document.root, targetId);
         if (!target) continue;
-        if (canContain(target.type, dragged.type, goal())) {
+        if (canContain(target.type, dragged.type)) {
           return { parentId: target.id, index: childIndex(match, y, dragId) };
         }
         var parentEl = match.parentElement ? match.parentElement.closest("[data-leaf-id]") : null;
         if (!parentEl) continue;
         var parentNode = findNode(current.document.root, parentEl.dataset.leafId);
-        if (!parentNode || !canContain(parentNode.type, dragged.type, goal())) continue;
+        if (!parentNode || !canContain(parentNode.type, dragged.type)) continue;
         return { parentId: parentNode.id, index: siblingIndex(parentEl, match, y, dragId) };
       }
       return null;

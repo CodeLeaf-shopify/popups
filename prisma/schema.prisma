@@ -37,7 +37,7 @@ model Popup {
   id               String   @id @default(cuid())
   shop             String
   name             String
-  kind             String
+  template         String   @map("kind")
   status           String   @default("draft")
   schemaVersion    Int      @default(1)
   draftDocument    String

@@ -23,10 +23,8 @@ export const NODE_TYPES = [
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
-export type PopupKind = "email" | "discount" | "exit" | "announcement";
 export type PopupStatus = "draft" | "published" | "archived";
 export type Presentation = "modal" | "bar";
-export type Goal = "none" | "email" | "discount";
 export type Device = "desktop" | "mobile";
 
 export type Tokens = {
@@ -114,7 +112,6 @@ export type Behavior = {
   frequency: Frequency;
   schedule: Schedule;
   targeting: Targeting;
-  goal: Goal;
   priority: number;
   discount: DiscountConfig | null;
 };
@@ -251,13 +248,26 @@ export const NODE_LABELS: Record<NodeType, string> = {
   close: "Close",
 };
 
-export function canContain(
-  parent: NodeType,
-  child: NodeType,
-  goal: Goal,
-): boolean {
-  if (child === "coupon" && goal !== "discount") return false;
+export function canContain(parent: NodeType, child: NodeType): boolean {
   return CONTAINMENT[parent].includes(child);
+}
+
+export function hasBlock(document: EditorDocument, type: NodeType): boolean {
+  return Object.values(document.nodes).some((node) => node.type === type);
+}
+
+export const DEFAULT_DISCOUNT: DiscountConfig = {
+  mode: "shared",
+  percentage: 10,
+  code: null,
+  shopifyDiscountId: null,
+};
+
+// Discount codes are issued only for popups that show a coupon block.
+export function syncDiscount(document: EditorDocument, behavior: Behavior): Behavior {
+  const wantsDiscount = hasBlock(document, "coupon");
+  if (wantsDiscount === Boolean(behavior.discount)) return behavior;
+  return { ...behavior, discount: wantsDiscount ? { ...DEFAULT_DISCOUNT } : null };
 }
 
 export function emptyCustomerState(): CustomerState {

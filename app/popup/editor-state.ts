@@ -1,5 +1,5 @@
 import { applyCommand } from "./commands";
-import type { Behavior, Command, EditorDocument, PopupStatus } from "./types";
+import { syncDiscount, type Behavior, type Command, type EditorDocument, type PopupStatus } from "./types";
 
 export type EditorMode = "edit" | "interact";
 export type EditorDevice = "desktop" | "tablet" | "mobile";
@@ -23,7 +23,6 @@ export type EditorSession = {
 export type EditorMeta = {
   id: string;
   name: string;
-  kind: string;
   status: PopupStatus;
   shop: string;
 };
@@ -102,7 +101,7 @@ export function createEditorState(input: {
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case "command": {
-      const result = applyCommand(state.document, action.command, state.behavior);
+      const result = applyCommand(state.document, action.command);
       if (result.error || result.document === state.document) {
         return {
           ...state,
@@ -116,6 +115,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return {
         ...state,
         document: result.document,
+        behavior: syncDiscount(result.document, state.behavior),
         session: {
           ...pushPast(state, action.coalesceKey),
           selectedId: result.insertedId ?? selectedStillExists,

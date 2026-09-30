@@ -85,7 +85,7 @@ async function ensureSharedCode(
   name: string,
   behavior: Behavior,
 ): Promise<Behavior> {
-  if (behavior.goal !== "discount" || !behavior.discount) return behavior;
+  if (!behavior.discount) return behavior;
   if (behavior.discount.mode !== "shared") return behavior;
   if (behavior.discount.shopifyDiscountId && behavior.discount.code) return behavior;
   const code = behavior.discount.code || discountCode();

@@ -1,7 +1,6 @@
 import {
   canContain,
   NODE_LABELS,
-  type Behavior,
   type Command,
   type EditorDocument,
   type EditorNode,
@@ -141,11 +140,10 @@ function insertNode(
   parentId: string,
   index: number,
   type: NodeType,
-  goal: Behavior["goal"],
 ): CommandResult {
   const parent = document.nodes[parentId];
   if (!parent) return { document, error: "That container no longer exists." };
-  if (!canContain(parent.type, type, goal)) {
+  if (!canContain(parent.type, type)) {
     return { document, error: `${NODE_LABELS[type]} cannot go inside ${NODE_LABELS[parent.type]}.` };
   }
 
@@ -163,7 +161,6 @@ function moveNode(
   nodeId: string,
   parentId: string,
   index: number,
-  goal: Behavior["goal"],
 ): CommandResult {
   const node = document.nodes[nodeId];
   const parent = document.nodes[parentId];
@@ -177,7 +174,7 @@ function moveNode(
   if (nodeId === parentId || isDescendant(document, nodeId, parentId)) {
     return { document, error: "A block cannot be moved inside itself." };
   }
-  if (!canContain(parent.type, node.type, goal)) {
+  if (!canContain(parent.type, node.type)) {
     return { document, error: `${NODE_LABELS[node.type]} cannot go inside ${NODE_LABELS[parent.type]}.` };
   }
 
@@ -255,28 +252,12 @@ function duplicateNode(document: EditorDocument, sourceId: string): CommandResul
   return { document: { ...document, nodes }, insertedId: copyId };
 }
 
-export function applyCommand(
-  document: EditorDocument,
-  command: Command,
-  behavior: Behavior,
-): CommandResult {
+export function applyCommand(document: EditorDocument, command: Command): CommandResult {
   switch (command.type) {
     case "insert":
-      return insertNode(
-        document,
-        command.parentId,
-        command.index,
-        command.nodeType,
-        behavior.goal,
-      );
+      return insertNode(document, command.parentId, command.index, command.nodeType);
     case "move":
-      return moveNode(
-        document,
-        command.nodeId,
-        command.parentId,
-        command.index,
-        behavior.goal,
-      );
+      return moveNode(document, command.nodeId, command.parentId, command.index);
     case "delete":
       return deleteNode(document, command.nodeId);
     case "duplicate":

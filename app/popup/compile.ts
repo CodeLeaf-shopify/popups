@@ -34,7 +34,7 @@ function compileNode(
 
   if (node.parentId) {
     const parent = document.nodes[node.parentId];
-    if (parent && !canContain(parent.type, node.type, behavior.goal)) {
+    if (parent && !canContain(parent.type, node.type)) {
       throw new Error(`“${node.name}” is not allowed inside “${parent.name}”.`);
     }
   }

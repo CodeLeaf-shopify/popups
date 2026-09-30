@@ -40,7 +40,8 @@ export function parseBehavior(raw: unknown): Behavior {
   if (!isRecord(raw) || !isRecord(raw.trigger) || !isRecord(raw.frequency) || !isRecord(raw.targeting)) {
     throw new Error("The saved popup behavior is invalid.");
   }
-  const behavior = raw as unknown as Behavior;
+  const behavior = { ...raw } as unknown as Behavior & { goal?: unknown };
+  delete behavior.goal;
   return {
     ...behavior,
     barPosition: behavior.barPosition === "bottom" ? "bottom" : "top",

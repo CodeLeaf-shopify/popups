@@ -26,7 +26,6 @@ type DesignPanelProps = {
 
 type StructurePanelProps = {
   document: EditorDocument;
-  behavior: Behavior;
   selectedId: string | null;
   commandError: string | null;
   onCommand: (command: Command, coalesceKey?: string) => void;
@@ -134,7 +133,6 @@ export function NumberInput({ label, value, min, max, step = 1, suffix, details,
 
 export function StructurePanel({
   document,
-  behavior,
   selectedId,
   commandError,
   onCommand,
@@ -143,7 +141,7 @@ export function StructurePanel({
   const selected = selectedId ? document.nodes[selectedId] : null;
   const parent = selected?.parentId ? document.nodes[selected.parentId] : null;
   const addTypes = selected
-    ? NODE_TYPES.filter((type) => canContain(selected.type, type, behavior.goal))
+    ? NODE_TYPES.filter((type) => canContain(selected.type, type))
     : [];
   const siblingIndex = parent && selected ? parent.childIds.indexOf(selected.id) : -1;
 
@@ -265,34 +263,6 @@ export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBeha
             </s-select>
           ) : null}
           <s-select
-            label="Goal"
-            value={behavior.goal}
-            onChange={(event) => {
-              const goal = valueOf(event);
-              const nextGoal = goal === "email" || goal === "discount" ? goal : "none";
-              onBehavior(
-                {
-                  ...behavior,
-                  goal: nextGoal,
-                  discount:
-                    nextGoal === "discount"
-                      ? behavior.discount ?? {
-                          mode: "shared",
-                          percentage: 10,
-                          code: null,
-                          shopifyDiscountId: null,
-                        }
-                      : null,
-                },
-                "goal",
-              );
-            }}
-          >
-            <s-option value="none">Announcement</s-option>
-            <s-option value="email">Email capture</s-option>
-            <s-option value="discount">Discount</s-option>
-          </s-select>
-          <s-select
             label="Trigger"
             value={behavior.trigger.type}
             onChange={(event) => {
@@ -413,7 +383,7 @@ export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBeha
               );
             }}
           />
-          {behavior.goal === "discount" && behavior.discount ? (
+          {behavior.discount ? (
             <>
               <s-select
                 label="Discount codes"

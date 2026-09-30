@@ -1,9 +1,10 @@
 # Leaf Popups architecture
 
 Leaf Popups uses one normalized editor model and one storefront rendering
-contract for every popup preset. Email capture, discounts, exit intent, and
-announcement bars are configurations of that shared model rather than separate
-products.
+contract for every popup. There are no popup types: a merchant starts from a
+blank popup or from a template (email capture, discount reveal, exit intent,
+announcement bar) and can add any block afterwards. Discount codes are issued
+whenever the popup contains a coupon block.
 
 ## System boundaries
 

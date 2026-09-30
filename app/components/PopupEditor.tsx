@@ -28,7 +28,6 @@ type PopupEditorProps = {
   meta: {
     id: string;
     name: string;
-    kind: string;
     status: PopupStatus;
     shop: string;
   };
@@ -409,7 +408,6 @@ export function PopupEditor({
             </s-section>
             <StructurePanel
               document={editor.document}
-              behavior={editor.behavior}
               selectedId={editor.session.selectedId}
               commandError={editor.session.commandError}
               onCommand={(command, coalesceKey) => dispatch({ type: "command", command, coalesceKey })}

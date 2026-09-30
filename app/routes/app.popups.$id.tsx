@@ -9,7 +9,13 @@ import { previewLink } from "../popup/preview-token.server";
 import { publishPopup, setPopupStatus } from "../popup/publish.server";
 import { readRendererSource } from "../popup/renderer-source.server";
 import { getShopSettings } from "../popup/settings.server";
-import type { Behavior, EditorDocument, PopupStatus, StorefrontPayload } from "../popup/types";
+import {
+  syncDiscount,
+  type Behavior,
+  type EditorDocument,
+  type PopupStatus,
+  type StorefrontPayload,
+} from "../popup/types";
 import { authenticate } from "../shopify.server";
 
 type EditorRequest = {
@@ -52,7 +58,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const popup = await prisma.popup.findFirst({ where: { id: params.id, shop: session.shop } });
   if (!popup) throw new Response("Popup not found", { status: 404 });
   const document = parseEditorDocument(JSON.parse(popup.draftDocument));
-  const behavior = parseBehavior(JSON.parse(popup.draftBehavior));
+  const behavior = syncDiscount(document, parseBehavior(JSON.parse(popup.draftBehavior)));
   const status = popupStatus(popup.status);
   const settings = await getShopSettings(session.shop);
   return {
@@ -67,7 +73,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     meta: {
       id: popup.id,
       name: popup.name,
-      kind: popup.kind,
       status,
       shop: popup.shop,
     },
@@ -111,7 +116,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     };
   }
   const name = body.name?.trim() || popup.name;
-  behavior = keepDiscountId(behavior, popup.draftBehavior);
+  behavior = keepDiscountId(syncDiscount(document, behavior), popup.draftBehavior);
 
   if (intent === "publish") {
     try {
