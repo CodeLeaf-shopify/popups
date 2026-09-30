@@ -1,4 +1,13 @@
-import { canContain, SCHEMA_VERSION, type Behavior, type CompiledNode, type EditorDocument, type StorefrontPayload } from "./types";
+import {
+  canContain,
+  resolveTokens,
+  SCHEMA_VERSION,
+  type Behavior,
+  type CompiledNode,
+  type EditorDocument,
+  type StorefrontPayload,
+  type Tokens,
+} from "./types";
 
 export type CompileResult =
   | { ok: true; payload: StorefrontPayload }
@@ -55,6 +64,7 @@ function compileNode(
 export function compile(
   document: EditorDocument,
   behavior: Behavior,
+  globalTokens: Tokens,
 ): CompileResult {
   try {
     if (!document.nodes[document.rootId]) {
@@ -67,7 +77,7 @@ export function compile(
         schemaVersion: SCHEMA_VERSION,
         kind: behavior.presentation,
         position: behavior.barPosition === "bottom" ? "bottom" : "top",
-        tokens: { ...document.tokens },
+        tokens: resolveTokens(globalTokens, document.tokens),
         root,
       },
       behavior: publicBehavior(behavior),

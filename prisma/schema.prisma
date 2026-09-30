@@ -45,6 +45,7 @@ model Popup {
   compiledPayload  String?
   contentRevision  String?
   assetUrl         String?
+  publishedTokens  String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -57,4 +58,15 @@ model Publication {
   syncStatus String
   error      String?
   syncedAt   DateTime?
+}
+
+model ShopSettings {
+  shop              String   @id
+  conflictMode      String   @default("queue")
+  paused            Boolean  @default(false)
+  tokens            String   @default("{}")
+  excludePaths      String   @default("[]")
+  hideForSubscribed Boolean  @default(false)
+  hideForLoggedIn   Boolean  @default(false)
+  updatedAt         DateTime @updatedAt
 }

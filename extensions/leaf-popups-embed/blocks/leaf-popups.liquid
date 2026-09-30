@@ -7,6 +7,7 @@
     "manifest": {{ shop.metafields.leaf_popups.manifest.value | json }},
     "customerState": {% if customer %}{{ customer.metafields.leaf_popups.state.value | json }}{% else %}null{% endif %},
     "loggedIn": {% if customer %}true{% else %}false{% endif %},
+    "acceptsMarketing": {% if customer and customer.accepts_marketing %}true{% else %}false{% endif %},
     "template": {{ template.name | json }},
     "path": {{ request.path | json }},
     "proxy": "/apps/leaf-popups",

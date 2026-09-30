@@ -56,7 +56,8 @@ export type EditorNode = {
 export type EditorDocument = {
   schemaVersion: number;
   rootId: string;
-  tokens: Tokens;
+  // Only the tokens this popup overrides; the rest come from the shop's global styles.
+  tokens: Partial<Tokens>;
   nodes: Record<string, EditorNode>;
 };
 
@@ -94,6 +95,7 @@ export type Targeting = {
   include: string[];
   exclude: string[];
   templates: string[];
+  hideForLoggedIn: boolean;
 };
 
 export type DiscountConfig = {
@@ -148,8 +150,23 @@ export type ManifestCampaign = {
   url: string;
 };
 
+export type ConflictMode = "all" | "queue" | "single";
+
+export type ManifestSettings = {
+  conflictMode: ConflictMode;
+  paused: boolean;
+  exclude: string[];
+  hideForSubscribed: boolean;
+  hideForLoggedIn: boolean;
+};
+
+export type ShopSettings = ManifestSettings & {
+  tokens: Tokens;
+};
+
 export type Manifest = {
   revision: string;
+  settings: ManifestSettings;
   campaigns: ManifestCampaign[];
 };
 
@@ -159,6 +176,7 @@ export type Command =
   | { type: "updateProps"; nodeId: string; props: Partial<NodeProps> }
   | { type: "updateStyle"; nodeId: string; style: Partial<NodeStyle> }
   | { type: "updateTokens"; tokens: Partial<Tokens> }
+  | { type: "resetToken"; token: keyof Tokens }
   | { type: "delete"; nodeId: string }
   | { type: "duplicate"; nodeId: string };
 
@@ -171,6 +189,25 @@ export const DEFAULT_TOKENS: Tokens = {
   width: 440,
   font: "system-ui, sans-serif",
 };
+
+export const TOKEN_KEYS = Object.keys(DEFAULT_TOKENS) as (keyof Tokens)[];
+
+export const DEFAULT_MANIFEST_SETTINGS: ManifestSettings = {
+  conflictMode: "queue",
+  paused: false,
+  exclude: [],
+  hideForSubscribed: false,
+  hideForLoggedIn: false,
+};
+
+export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
+  ...DEFAULT_MANIFEST_SETTINGS,
+  tokens: DEFAULT_TOKENS,
+};
+
+export function resolveTokens(globalTokens: Tokens, overrides: Partial<Tokens>): Tokens {
+  return { ...DEFAULT_TOKENS, ...globalTokens, ...overrides };
+}
 
 export const CONTAINMENT: Record<NodeType, readonly NodeType[]> = {
   stack: [

@@ -1,14 +1,26 @@
-import { canContain, NODE_LABELS, NODE_TYPES, type Behavior, type Command, type EditorDocument, type NodeType } from "../popup/types";
+import {
+  canContain,
+  NODE_LABELS,
+  NODE_TYPES,
+  resolveTokens,
+  type Behavior,
+  type Command,
+  type EditorDocument,
+  type NodeType,
+  type Tokens,
+} from "../popup/types";
 import { LayersPanel } from "./LayersPanel";
 
 type PopupSettingsPanelProps = {
   behavior: Behavior;
+  hiddenForLoggedInGlobally: boolean;
   onBehavior: (behavior: Behavior, coalesceKey?: string) => void;
 };
 
 type DesignPanelProps = {
   document: EditorDocument;
   behavior: Behavior;
+  globalTokens: Tokens;
   onCommand: (command: Command, coalesceKey?: string) => void;
 };
 
@@ -34,7 +46,7 @@ type ColorTokenFieldProps = {
   onValue: (value: string) => void;
 };
 
-function ColorTokenField({ id, label, value, alpha = false, onValue }: ColorTokenFieldProps) {
+export function ColorTokenField({ id, label, value, alpha = false, onValue }: ColorTokenFieldProps) {
   const popoverId = `${id}-picker`;
   return (
     <>
@@ -95,7 +107,7 @@ type NumberInputProps = {
   onValue: (value: number) => void;
 };
 
-function NumberInput({ label, value, min, max, step = 1, suffix, details, onValue }: NumberInputProps) {
+export function NumberInput({ label, value, min, max, step = 1, suffix, details, onValue }: NumberInputProps) {
   const inRange = (next: number) => (min === undefined || next >= min) && (max === undefined || next <= max);
   const clamp = (next: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, next));
   return (
@@ -220,7 +232,7 @@ export function StructurePanel({
   );
 }
 
-export function PopupSettingsPanel({ behavior, onBehavior }: PopupSettingsPanelProps) {
+export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBehavior }: PopupSettingsPanelProps) {
   return (
     <s-section heading="Popup settings">
         <s-stack direction="block" gap="base">
@@ -384,6 +396,23 @@ export function PopupSettingsPanel({ behavior, onBehavior }: PopupSettingsPanelP
               )
             }
           />
+          <s-checkbox
+            label="Hide from logged-in customers"
+            {...(hiddenForLoggedInGlobally || behavior.targeting.hideForLoggedIn ? { checked: true } : {})}
+            {...(hiddenForLoggedInGlobally
+              ? { disabled: true, details: "Hidden for all popups in Settings." }
+              : {})}
+            onChange={(event) => {
+              const target = event.currentTarget as { checked?: boolean };
+              onBehavior(
+                {
+                  ...behavior,
+                  targeting: { ...behavior.targeting, hideForLoggedIn: target.checked === true },
+                },
+                "hide-logged-in",
+              );
+            }}
+          />
           {behavior.goal === "discount" && behavior.discount ? (
             <>
               <s-select
@@ -441,71 +470,91 @@ export function PopupSettingsPanel({ behavior, onBehavior }: PopupSettingsPanelP
   );
 }
 
-export function DesignPanel({ document, behavior, onCommand }: DesignPanelProps) {
+export function DesignPanel({ document, behavior, globalTokens, onCommand }: DesignPanelProps) {
+  const tokens = resolveTokens(globalTokens, document.tokens);
+  const reset = (token: keyof Tokens) =>
+    token in document.tokens ? (
+      <s-stack direction="inline" gap="small-200" alignItems="center">
+        <s-badge tone="info">Custom</s-badge>
+        <s-button variant="tertiary" onClick={() => onCommand({ type: "resetToken", token })}>
+          Reset to global
+        </s-button>
+      </s-stack>
+    ) : null;
   return (
     <s-section heading="Design">
         <s-stack direction="block" gap="base">
+          <s-text color="subdued">
+            Unchanged values follow the default styles in Settings.
+          </s-text>
           <ColorTokenField
             id="leaf-background-color"
             label="Background"
-            value={document.tokens.background}
+            value={tokens.background}
             onValue={(background) =>
               onCommand({ type: "updateTokens", tokens: { background } }, "token-background")
             }
           />
+          {reset("background")}
           <ColorTokenField
             id="leaf-text-color"
             label="Text"
-            value={document.tokens.text}
+            value={tokens.text}
             onValue={(text) =>
               onCommand({ type: "updateTokens", tokens: { text } }, "token-text")
             }
           />
+          {reset("text")}
           <ColorTokenField
             id="leaf-accent-color"
             label="Accent"
-            value={document.tokens.accent}
+            value={tokens.accent}
             onValue={(accent) =>
               onCommand({ type: "updateTokens", tokens: { accent } }, "token-accent")
             }
           />
+          {reset("accent")}
           {behavior.presentation === "modal" ? (
-            <ColorTokenField
-              id="leaf-overlay-color"
-              label="Overlay"
-              alpha
-              value={document.tokens.overlay}
-              onValue={(overlay) =>
-                onCommand({ type: "updateTokens", tokens: { overlay } }, "token-overlay")
-              }
-            />
-          ) : null}
-          {behavior.presentation === "modal" ? (
-            <NumberInput
-              label="Width"
-              value={document.tokens.width}
-              min={240}
-              max={960}
-              step={10}
-              suffix="px"
-              onValue={(width) => onCommand({ type: "updateTokens", tokens: { width } }, "token-width")}
-            />
+            <>
+              <ColorTokenField
+                id="leaf-overlay-color"
+                label="Overlay"
+                alpha
+                value={tokens.overlay}
+                onValue={(overlay) =>
+                  onCommand({ type: "updateTokens", tokens: { overlay } }, "token-overlay")
+                }
+              />
+              {reset("overlay")}
+              <NumberInput
+                label="Width"
+                value={tokens.width}
+                min={240}
+                max={960}
+                step={10}
+                suffix="px"
+                onValue={(width) => onCommand({ type: "updateTokens", tokens: { width } }, "token-width")}
+              />
+              {reset("width")}
+            </>
           ) : null}
           <NumberInput
             label="Corner radius"
-            value={document.tokens.radius}
+            value={tokens.radius}
             min={0}
             max={48}
             suffix="px"
             onValue={(radius) => onCommand({ type: "updateTokens", tokens: { radius } }, "token-radius")}
           />
+          {reset("radius")}
           <s-text-field
             label="Font"
-            value={document.tokens.font}
+            value={tokens.font}
             onInput={(event) =>
               onCommand({ type: "updateTokens", tokens: { font: valueOf(event) } }, "token-font")
             }
           />
+          {reset("font")}
         </s-stack>
     </s-section>
   );

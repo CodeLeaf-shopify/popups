@@ -3,8 +3,10 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
 import { compile } from "../popup/compile";
 import { recordPopupEvent, submitPopup } from "../popup/customers.server";
+import { parseManifest } from "../popup/parse";
 import { draftsFromRow } from "../popup/publish.server";
 import { verifyPreviewToken } from "../popup/preview-token.server";
+import { getShopSettings } from "../popup/settings.server";
 import { authenticate } from "../shopify.server";
 
 function json(body: unknown, status = 200): Response {
@@ -35,9 +37,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       where: { shop: context.session.shop },
       select: { manifest: true },
     });
-    if (!publication?.manifest) return json({ revision: "", campaigns: [] });
+    if (!publication?.manifest) return json(parseManifest(null));
     try {
-      return json(JSON.parse(publication.manifest));
+      return json(parseManifest(publication.manifest));
     } catch {
       return json({ ok: false, error: "Stored manifest is invalid." }, 500);
     }
@@ -50,7 +52,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const popup = await prisma.popup.findFirst({ where: { id: claims.popupId, shop: context.session.shop } });
   if (!popup) return json({ ok: false, error: "Popup not found." }, 404);
   const { document, behavior } = draftsFromRow(popup);
-  const compiled = compile(document, behavior);
+  const { tokens: globalTokens } = await getShopSettings(context.session.shop);
+  const compiled = compile(document, behavior, globalTokens);
   if (!compiled.ok) return json({ ok: false, error: compiled.error }, 422);
   return json({ ...compiled.payload, popupId: popup.id });
 };

@@ -8,6 +8,7 @@ import { parseBehavior, parseEditorDocument, parsePayload } from "../popup/parse
 import { previewLink } from "../popup/preview-token.server";
 import { publishPopup, setPopupStatus } from "../popup/publish.server";
 import { readRendererSource } from "../popup/renderer-source.server";
+import { getShopSettings } from "../popup/settings.server";
 import type { Behavior, EditorDocument, PopupStatus, StorefrontPayload } from "../popup/types";
 import { authenticate } from "../shopify.server";
 
@@ -53,8 +54,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const document = parseEditorDocument(JSON.parse(popup.draftDocument));
   const behavior = parseBehavior(JSON.parse(popup.draftBehavior));
   const status = popupStatus(popup.status);
+  const settings = await getShopSettings(session.shop);
   return {
     rendererSource: readRendererSource(),
+    globalTokens: settings.tokens,
+    hiddenForLoggedInGlobally: settings.hideForLoggedIn,
     document,
     behavior,
     updatedAt: popup.updatedAt.toISOString(),
@@ -150,8 +154,17 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 export default function PopupRoute() {
-  const { rendererSource, document, behavior, updatedAt, meta, publishedPayload, preview } =
-    useLoaderData<typeof loader>();
+  const {
+    rendererSource,
+    document,
+    behavior,
+    updatedAt,
+    meta,
+    publishedPayload,
+    preview,
+    globalTokens,
+    hiddenForLoggedInGlobally,
+  } = useLoaderData<typeof loader>();
   return (
     <PopupEditor
       key={meta.id}
@@ -162,6 +175,8 @@ export default function PopupRoute() {
       meta={meta}
       publishedPayload={publishedPayload}
       preview={preview}
+      globalTokens={globalTokens}
+      hiddenForLoggedInGlobally={hiddenForLoggedInGlobally}
     />
   );
 }

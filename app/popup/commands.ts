@@ -299,6 +299,11 @@ export function applyCommand(
       return {
         document: { ...document, tokens: { ...document.tokens, ...command.tokens } },
       };
+    case "resetToken": {
+      const tokens = { ...document.tokens };
+      delete tokens[command.token];
+      return { document: { ...document, tokens } };
+    }
     default:
       return { document, error: "Unknown edit." };
   }

@@ -4,7 +4,7 @@ import { useFetcher } from "react-router";
 import { compile } from "../popup/compile";
 import { createEditorState, editorReducer, type EditorDevice } from "../popup/editor-state";
 import { stableStringify } from "../popup/stable-stringify";
-import type { Behavior, Command, EditorDocument, PopupStatus, StorefrontPayload } from "../popup/types";
+import type { Behavior, Command, EditorDocument, PopupStatus, StorefrontPayload, Tokens } from "../popup/types";
 import { DesignPanel, PopupSettingsPanel, StructurePanel } from "./PropertyPanel";
 
 type PreviewLink = { url: string; expiresAt: number };
@@ -35,6 +35,8 @@ type PopupEditorProps = {
   updatedAt: string;
   publishedPayload: StorefrontPayload | null;
   preview: PreviewLink;
+  globalTokens: Tokens;
+  hiddenForLoggedInGlobally: boolean;
 };
 
 const DEVICE_WIDTHS: Record<EditorDevice, number | string> = {
@@ -57,6 +59,8 @@ export function PopupEditor({
   updatedAt,
   publishedPayload: initialPublishedPayload,
   preview: initialPreview,
+  globalTokens,
+  hiddenForLoggedInGlobally,
 }: PopupEditorProps) {
   const [editor, dispatch] = useReducer(
     editorReducer,
@@ -86,8 +90,8 @@ export function PopupEditor({
   const [seenPreview, setSeenPreview] = useState(previewFetcher.data);
   const key = draftKey(editor.meta.name, editor.document, editor.behavior);
   const compiled = useMemo(
-    () => compile(editor.document, editor.behavior),
-    [editor.document, editor.behavior],
+    () => compile(editor.document, editor.behavior, globalTokens),
+    [editor.document, editor.behavior, globalTokens],
   );
   const previewRef = useRef({
     payload: compiled.ok ? compiled.payload : null,
@@ -418,11 +422,13 @@ export function PopupEditor({
             >
               <PopupSettingsPanel
                 behavior={editor.behavior}
+                hiddenForLoggedInGlobally={hiddenForLoggedInGlobally}
                 onBehavior={(behavior, coalesceKey) => dispatch({ type: "behavior", behavior, coalesceKey })}
               />
               <DesignPanel
                 document={editor.document}
                 behavior={editor.behavior}
+                globalTokens={globalTokens}
                 onCommand={(command, coalesceKey) => dispatch({ type: "command", command, coalesceKey })}
               />
             </s-grid>

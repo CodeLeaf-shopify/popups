@@ -1,5 +1,4 @@
 import {
-  DEFAULT_TOKENS,
   SCHEMA_VERSION,
   type Behavior,
   type EditorDocument,
@@ -43,7 +42,7 @@ function attach(parent: EditorNode, children: EditorNode[]): EditorNode[] {
   return [parent, ...children];
 }
 
-function documentFrom(tokens: Tokens, root: EditorNode, rest: EditorNode[]): EditorDocument {
+function documentFrom(tokens: Partial<Tokens>, root: EditorNode, rest: EditorNode[]): EditorDocument {
   const nodes: Record<string, EditorNode> = { [root.id]: root };
   for (const entry of rest) nodes[entry.id] = entry;
   return { schemaVersion: SCHEMA_VERSION, rootId: root.id, tokens, nodes };
@@ -61,6 +60,7 @@ function baseBehavior(goal: Behavior["goal"], presentation: Behavior["presentati
       include: [],
       exclude: [],
       templates: [],
+      hideForLoggedIn: false,
     },
     goal,
     priority: 0,
@@ -69,7 +69,7 @@ function baseBehavior(goal: Behavior["goal"], presentation: Behavior["presentati
 }
 
 function modalShell(
-  tokens: Tokens,
+  tokens: Partial<Tokens>,
   title: string,
   body: string,
   rootChildren: EditorNode[],
@@ -91,7 +91,7 @@ function modalShell(
 
 export function createPreset(kind: PopupKind): PopupDraft {
   if (kind === "announcement") {
-    const tokens = { ...DEFAULT_TOKENS, background: "#111111", text: "#ffffff", accent: "#ffffff", width: 440 };
+    const tokens: Partial<Tokens> = { background: "#111111", text: "#ffffff", accent: "#ffffff" };
     const root = node("stack", null, "Bar", {}, {
       direction: "row",
       gap: 16,
@@ -130,7 +130,7 @@ export function createPreset(kind: PopupKind): PopupDraft {
     return {
       name: "Discount reveal",
       kind,
-      document: modalShell(DEFAULT_TOKENS, "Take 10% off", "Use this code at checkout.", [coupon, button]),
+      document: modalShell({}, "Take 10% off", "Use this code at checkout.", [coupon, button]),
       behavior,
     };
   }
@@ -153,7 +153,7 @@ export function createPreset(kind: PopupKind): PopupDraft {
   return {
     name: kind === "exit" ? "Exit intent" : "Email capture",
     kind,
-    document: modalShell(DEFAULT_TOKENS, title, body, [form], [field, submit]),
+    document: modalShell({}, title, body, [form], [field, submit]),
     behavior,
   };
 }

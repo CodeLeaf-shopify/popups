@@ -8,8 +8,17 @@ import { createSharedDiscount, discountCode } from "./discounts.server";
 import { uploadPopupPayload } from "./files.server";
 import { ensureMetafieldDefinitions, writeShopManifest } from "./metafields.server";
 import { parseBehavior, parseEditorDocument, parsePayload } from "./parse";
+import { getShopSettings, manifestSettings } from "./settings.server";
 import type { AdminClient } from "./admin-graphql.server";
-import type { Behavior, EditorDocument, Manifest, ManifestCampaign, StorefrontPayload } from "./types";
+import {
+  resolveTokens,
+  type Behavior,
+  type EditorDocument,
+  type Manifest,
+  type ManifestCampaign,
+  type StorefrontPayload,
+  type Tokens,
+} from "./types";
 
 export function contentRevision(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
@@ -45,8 +54,10 @@ export async function syncManifest(
     if (campaign) campaigns.push(campaign);
   }
   campaigns.sort((left, right) => right.priority - left.priority);
+  const settings = manifestSettings(await getShopSettings(shop));
   const manifest: Manifest = {
-    revision: contentRevision(campaigns),
+    revision: contentRevision({ settings, campaigns }),
+    settings,
     campaigns,
   };
   try {
@@ -103,10 +114,11 @@ export async function publishPopup(
 > {
   const existing = await prisma.popup.findFirst({ where: { id: popupId, shop } });
   if (!existing) return { ok: false, error: "Popup not found." };
-  const preview = compile(document, behavior);
+  const { tokens: globalTokens } = await getShopSettings(shop);
+  const preview = compile(document, behavior, globalTokens);
   if (!preview.ok) return preview;
   const withCode = await ensureSharedCode(admin, name, behavior);
-  const compiled = compile(document, withCode);
+  const compiled = compile(document, withCode, globalTokens);
   if (!compiled.ok) return compiled;
   const revision = contentRevision(compiled.payload);
   const assetUrl = await uploadPopupPayload(
@@ -126,6 +138,7 @@ export async function publishPopup(
       compiledPayload: JSON.stringify(compiled.payload),
       contentRevision: revision,
       assetUrl,
+      publishedTokens: JSON.stringify(document.tokens),
     },
   });
   const synced = await syncManifest(admin, shop);
@@ -137,6 +150,53 @@ export async function publishPopup(
     payload: compiled.payload,
     behavior: withCode,
   };
+}
+
+export async function republishAll(
+  admin: AdminClient,
+  shop: string,
+): Promise<{ ok: true; republished: number } | { ok: false; error: string }> {
+  const { tokens: globalTokens } = await getShopSettings(shop);
+  const popups = await prisma.popup.findMany({ where: { shop, status: "published" } });
+  const failures: string[] = [];
+  let republished = 0;
+  for (const popup of popups) {
+    if (!popup.compiledPayload) continue;
+    try {
+      // Only tokens are re-resolved: the draft may hold edits that were never published.
+      const live = parsePayload(JSON.parse(popup.compiledPayload));
+      const overrides = popup.publishedTokens
+        ? (JSON.parse(popup.publishedTokens) as Partial<Tokens>)
+        : live.document.tokens;
+      const payload: StorefrontPayload = {
+        ...live,
+        document: { ...live.document, tokens: resolveTokens(globalTokens, overrides) },
+      };
+      const revision = contentRevision(payload);
+      if (revision === popup.contentRevision) continue;
+      const assetUrl = await uploadPopupPayload(
+        admin,
+        `leaf-popup-${popup.id}-${revision}.json`,
+        JSON.stringify(payload),
+      );
+      await prisma.popup.update({
+        where: { id: popup.id },
+        data: {
+          compiledPayload: JSON.stringify(payload),
+          contentRevision: revision,
+          assetUrl,
+          updatedAt: popup.updatedAt,
+        },
+      });
+      republished += 1;
+    } catch (error) {
+      failures.push(`${popup.name}: ${error instanceof Error ? error.message : "could not be republished"}`);
+    }
+  }
+  const synced = await syncManifest(admin, shop);
+  if (!synced.ok) return synced;
+  if (failures.length) return { ok: false, error: `Some popups kept their previous styles. ${failures.join(" ")}` };
+  return { ok: true, republished };
 }
 
 export async function setPopupStatus(

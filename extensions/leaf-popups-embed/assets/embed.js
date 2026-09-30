@@ -42,8 +42,26 @@
     return Array.isArray(value) ? value.filter(Boolean) : [];
   }
 
+  function settings() {
+    var value = (boot.manifest && boot.manifest.settings) || {};
+    return {
+      conflictMode: value.conflictMode === "all" || value.conflictMode === "single" ? value.conflictMode : "queue",
+      paused: value.paused === true,
+      exclude: list(value.exclude),
+      hideForSubscribed: value.hideForSubscribed === true,
+      hideForLoggedIn: value.hideForLoggedIn === true,
+    };
+  }
+
+  function subscribed(state) {
+    if (boot.acceptsMarketing || state.consent) return true;
+    var popups = state.popups || {};
+    return Object.keys(popups).some(function (id) { return Boolean(popups[id] && popups[id].submittedAt); });
+  }
+
   function eligible(campaign, state) {
     var targeting = campaign.targeting || {};
+    if (boot.loggedIn && targeting.hideForLoggedIn) return false;
     if (list(targeting.devices).indexOf(device()) === -1) return false;
     var path = boot.path || window.location.pathname;
     var excluded = list(targeting.exclude).some(function (prefix) { return path.indexOf(prefix) === 0; });
@@ -199,6 +217,10 @@
   }
 
   function enqueue(campaign, payload) {
+    if (settings().conflictMode === "all") {
+      showPayload(payload, campaign);
+      return;
+    }
     var key = slotKey(campaign, payload);
     var slot = slots[key] || (slots[key] = { active: false, ready: [] });
     slot.ready.push({ campaign: campaign, payload: payload });
@@ -299,15 +321,27 @@
     loadManifest()
       .then(function (manifest) {
         boot.manifest = manifest;
+        var shop = settings();
+        if (shop.paused) {
+          running = false;
+          if (typeof console !== "undefined") console.info("[Leaf Popups] Popups are paused in Settings.");
+          return null;
+        }
         var campaigns = manifest.campaigns;
         var state = mergedState();
-        var matched = campaigns.filter(function (campaign) { return eligible(campaign, state); });
+        var path = boot.path || window.location.pathname;
+        var blocked =
+          (shop.hideForLoggedIn && boot.loggedIn) ||
+          (shop.hideForSubscribed && subscribed(state)) ||
+          shop.exclude.some(function (prefix) { return path.indexOf(prefix) === 0; });
+        var matched = blocked ? [] : campaigns.filter(function (campaign) { return eligible(campaign, state); });
         matched.sort(function (left, right) { return (right.priority || 0) - (left.priority || 0); });
         if (!matched.length) {
           running = false;
           if (typeof console !== "undefined") {
             console.info("[Leaf Popups] No eligible campaigns.", {
               total: campaigns.length,
+              blockedBySettings: Boolean(blocked),
               path: boot.path,
               template: boot.template,
               device: device(),
@@ -315,6 +349,7 @@
           }
           return null;
         }
+        if (shop.conflictMode === "single") matched = matched.slice(0, 1);
         return loadRenderer().then(function () {
           matched.forEach(armCampaign);
         });

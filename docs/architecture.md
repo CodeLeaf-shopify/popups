@@ -49,7 +49,9 @@ Prisma stores non-customer application data:
 - Shopify sessions;
 - merchant-authored popup drafts and behavior;
 - compiled publication payloads and revisions;
-- the last publication manifest and synchronization status.
+- the last publication manifest and synchronization status;
+- shop settings (`ShopSettings`): conflict mode, pause switch, default styles,
+  global path exclusions, and audience rules.
 
 Draft documents are normalized node maps. Builder commands are responsible for
 insert, move, reparent, property/style updates, deletion, and duplication.
@@ -60,6 +62,10 @@ Containment checks reject invalid trees before they reach the compiler.
 The shop metafield `leaf_popups.manifest` is the published campaign index. It
 contains targeting and trigger metadata plus content-addressed Shopify Files
 URLs. Full popup designs are kept out of the manifest.
+
+The manifest also carries a `settings` block copied from `ShopSettings`:
+`conflictMode`, `paused`, `exclude`, `hideForSubscribed`, and
+`hideForLoggedIn`. Saving settings rebuilds the manifest.
 
 ### Shopify customer data
 
@@ -87,6 +93,14 @@ contract. It includes a schema version, presentation kind, design tokens, and a
 root node. Unknown node types are never generated and merchant-authored raw
 HTML is not supported.
 
+Design tokens are inherited. A draft document's `tokens` holds only the values
+that popup overrides; the compiler resolves them over the shop's default styles
+(`ShopSettings.tokens`) and `DEFAULT_TOKENS`, so compiled payloads always carry
+a full token set. Each publish stores the popup's overrides in
+`Popup.publishedTokens`. When default styles change, `republishAll` re-resolves
+tokens on each live payload (not the draft, which may hold unpublished edits),
+uploads new files, and rebuilds the manifest.
+
 The compiled document is the only input to both render surfaces:
 
 - the admin iframe receives it with `postMessage`;
@@ -110,10 +124,16 @@ Unpublishing rebuilds the manifest without the campaign. Old
 content-addressed files can remain because storefronts no longer reference
 them.
 
-On each page, the embed reads the Liquid-rendered manifest, filters campaigns
-by device, schedule, path, and frequency, then fetches only the selected
-payload. At most one modal is shown; an announcement bar can appear alongside
-it.
+On each page, the embed reads the Liquid-rendered manifest. It stops when
+`settings.paused` is set, or when shop-wide exclusions or audience rules block
+the visitor. It then filters campaigns by device, schedule, path, per-popup
+`hideForLoggedIn`, and frequency, and fetches only the selected payloads.
+`settings.conflictMode` decides how overlapping popups behave:
+
+- `queue` (default): one modal, one top bar, and one bottom bar at a time;
+  popups competing for the same spot wait in priority order;
+- `all`: every popup shows as soon as its trigger fires;
+- `single`: only the highest-priority eligible popup is armed per page view.
 
 ## Storefront writes and previews
 
