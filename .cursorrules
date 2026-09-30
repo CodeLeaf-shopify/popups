@@ -37,3 +37,6 @@
 # React Router & Authentication
 - Admin routes (`loader` / `action`): Use `const { admin } = await authenticate.admin(request);` to mutate Prisma, upload to Files, or set Shop Metafields.
 - App Proxy routes (Storefront submissions): Use `authenticate.public.appProxy(request)`, then the offline Admin GraphQL client from that context to update Customer Metafields. NEVER use `authenticate.admin` in app proxy routes.
+
+# Git Commit Message
+Whenever you complete a code change or task, you must output a short formatted Git commit message at the very end of your response
