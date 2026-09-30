@@ -5,7 +5,7 @@ import { compile } from "../popup/compile";
 import { createEditorState, editorReducer, type EditorDevice } from "../popup/editor-state";
 import { stableStringify } from "../popup/stable-stringify";
 import type { Behavior, Command, EditorDocument, PopupStatus, StorefrontPayload } from "../popup/types";
-import { PropertyPanel } from "./PropertyPanel";
+import { DesignPanel, PopupSettingsPanel, StructurePanel } from "./PropertyPanel";
 
 type PreviewLink = { url: string; expiresAt: number };
 
@@ -250,6 +250,7 @@ export function PopupEditor({
   const saving = saveFetcher.state !== "idle";
   const unsaved = key !== savedKey;
   const published = editor.meta.status === "published";
+  const archived = editor.meta.status === "archived";
   const hasChanges =
     !published ||
     !publishedPayload ||
@@ -334,7 +335,8 @@ export function PopupEditor({
         {conflict ? <s-banner tone="critical">{conflict}</s-banner> : null}
         {!compiled.ok ? <s-banner tone="warning">{compiled.error}</s-banner> : null}
         <s-query-container>
-          <s-grid gridTemplateColumns="@container (inline-size > 860px) minmax(0, 1fr) 360px, minmax(0, 1fr)" gap="base">
+          <s-stack direction="block" gap="base">
+            <s-grid gridTemplateColumns="minmax(0, 1fr) 360px" gap="base">
             <s-section>
               <s-stack direction="block" gap="base">
                 <s-grid gridTemplateColumns="@container (inline-size > 560px) minmax(0, 1fr) auto, minmax(0, 1fr)" gap="base" alignItems="end">
@@ -347,7 +349,9 @@ export function PopupEditor({
                     }}
                   />
                   <s-stack direction="inline" gap="small-200" alignItems="center">
-                    <s-badge tone={published ? "success" : "info"}>{published ? "Published" : "Draft"}</s-badge>
+                    <s-badge tone={published ? "success" : archived ? "warning" : "info"}>
+                      {published ? "Published" : archived ? "Archived" : "Draft"}
+                    </s-badge>
                     {published && hasChanges ? <s-badge tone="warning">Unpublished changes</s-badge> : null}
                     <s-text color="subdued">{saving ? "Saving…" : unsaved ? "Unsaved changes" : "Saved"}</s-text>
                   </s-stack>
@@ -399,16 +403,30 @@ export function PopupEditor({
                 </s-box>
               </s-stack>
             </s-section>
-            <PropertyPanel
+            <StructurePanel
               document={editor.document}
               behavior={editor.behavior}
               selectedId={editor.session.selectedId}
               commandError={editor.session.commandError}
               onCommand={(command, coalesceKey) => dispatch({ type: "command", command, coalesceKey })}
-              onBehavior={(behavior, coalesceKey) => dispatch({ type: "behavior", behavior, coalesceKey })}
               onSelect={(id) => dispatch({ type: "select", id })}
             />
-          </s-grid>
+            </s-grid>
+            <s-grid
+              gridTemplateColumns="@container (inline-size > 860px) minmax(0, 1fr) minmax(0, 1fr), minmax(0, 1fr)"
+              gap="base"
+            >
+              <PopupSettingsPanel
+                behavior={editor.behavior}
+                onBehavior={(behavior, coalesceKey) => dispatch({ type: "behavior", behavior, coalesceKey })}
+              />
+              <DesignPanel
+                document={editor.document}
+                behavior={editor.behavior}
+                onCommand={(command, coalesceKey) => dispatch({ type: "command", command, coalesceKey })}
+              />
+            </s-grid>
+          </s-stack>
         </s-query-container>
       </s-stack>
     </s-page>

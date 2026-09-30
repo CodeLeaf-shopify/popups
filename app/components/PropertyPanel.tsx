@@ -1,19 +1,87 @@
 import { canContain, NODE_LABELS, NODE_TYPES, type Behavior, type Command, type EditorDocument, type NodeType } from "../popup/types";
 import { LayersPanel } from "./LayersPanel";
 
-type PropertyPanelProps = {
+type PopupSettingsPanelProps = {
+  behavior: Behavior;
+  onBehavior: (behavior: Behavior, coalesceKey?: string) => void;
+};
+
+type DesignPanelProps = {
+  document: EditorDocument;
+  behavior: Behavior;
+  onCommand: (command: Command, coalesceKey?: string) => void;
+};
+
+type StructurePanelProps = {
   document: EditorDocument;
   behavior: Behavior;
   selectedId: string | null;
   commandError: string | null;
   onCommand: (command: Command, coalesceKey?: string) => void;
-  onBehavior: (behavior: Behavior, coalesceKey?: string) => void;
   onSelect: (id: string) => void;
 };
 
 function valueOf(event: Event): string {
   const target = event.currentTarget as { value?: string } | null;
   return target?.value ?? "";
+}
+
+type ColorTokenFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  alpha?: boolean;
+  onValue: (value: string) => void;
+};
+
+function ColorTokenField({ id, label, value, alpha = false, onValue }: ColorTokenFieldProps) {
+  const popoverId = `${id}-picker`;
+  return (
+    <>
+      <s-clickable
+        commandFor={popoverId}
+        accessibilityLabel={`Choose ${label.toLowerCase()}`}
+        border="base"
+        borderRadius="base"
+        padding="base"
+      >
+        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
+          <s-thumbnail src={colorSwatch(value)} alt="" size="small" />
+          <s-stack direction="block" gap="small-100">
+            <s-text type="strong">{label}</s-text>
+            <s-text color="subdued">{value}</s-text>
+          </s-stack>
+        </s-grid>
+      </s-clickable>
+      <s-popover id={popoverId} inlineSize="320px">
+        <s-box padding="base">
+          <s-stack direction="block" gap="base">
+            <s-color-picker
+              value={value}
+              {...(alpha ? { alpha: true } : {})}
+              onInput={(event) => onValue(valueOf(event))}
+              onChange={(event) => onValue(valueOf(event))}
+            />
+            <s-color-field
+              label={`${label} color value`}
+              value={value}
+              {...(alpha ? { alpha: true } : {})}
+              onInput={(event) => onValue(valueOf(event))}
+            />
+          </s-stack>
+        </s-box>
+      </s-popover>
+    </>
+  );
+}
+
+function colorSwatch(value: string): string {
+  const safeColor =
+    /^(#[\da-f]{3,8}|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%degturnrad]+\))$/i.test(value)
+      ? value
+      : "#ffffff";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="8" fill="${safeColor}"/></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 type NumberInputProps = {
@@ -52,15 +120,14 @@ function NumberInput({ label, value, min, max, step = 1, suffix, details, onValu
   );
 }
 
-export function PropertyPanel({
+export function StructurePanel({
   document,
   behavior,
   selectedId,
   commandError,
   onCommand,
-  onBehavior,
   onSelect,
-}: PropertyPanelProps) {
+}: StructurePanelProps) {
   const selected = selectedId ? document.nodes[selectedId] : null;
   const parent = selected?.parentId ? document.nodes[selected.parentId] : null;
   const addTypes = selected
@@ -149,8 +216,13 @@ export function PropertyPanel({
       <s-section heading="Layers">
         <LayersPanel document={document} selectedId={selectedId} onSelect={onSelect} />
       </s-section>
+    </s-stack>
+  );
+}
 
-      <s-section heading="Popup settings">
+export function PopupSettingsPanel({ behavior, onBehavior }: PopupSettingsPanelProps) {
+  return (
+    <s-section heading="Popup settings">
         <s-stack direction="block" gap="base">
           <s-select
             label="Shows as"
@@ -365,38 +437,46 @@ export function PropertyPanel({
             </>
           ) : null}
         </s-stack>
-      </s-section>
+    </s-section>
+  );
+}
 
-      <s-section heading="Design">
+export function DesignPanel({ document, behavior, onCommand }: DesignPanelProps) {
+  return (
+    <s-section heading="Design">
         <s-stack direction="block" gap="base">
-          <s-color-field
+          <ColorTokenField
+            id="leaf-background-color"
             label="Background"
             value={document.tokens.background}
-            onInput={(event) =>
-              onCommand({ type: "updateTokens", tokens: { background: valueOf(event) } }, "token-background")
+            onValue={(background) =>
+              onCommand({ type: "updateTokens", tokens: { background } }, "token-background")
             }
           />
-          <s-color-field
+          <ColorTokenField
+            id="leaf-text-color"
             label="Text"
             value={document.tokens.text}
-            onInput={(event) =>
-              onCommand({ type: "updateTokens", tokens: { text: valueOf(event) } }, "token-text")
+            onValue={(text) =>
+              onCommand({ type: "updateTokens", tokens: { text } }, "token-text")
             }
           />
-          <s-color-field
+          <ColorTokenField
+            id="leaf-accent-color"
             label="Accent"
             value={document.tokens.accent}
-            onInput={(event) =>
-              onCommand({ type: "updateTokens", tokens: { accent: valueOf(event) } }, "token-accent")
+            onValue={(accent) =>
+              onCommand({ type: "updateTokens", tokens: { accent } }, "token-accent")
             }
           />
           {behavior.presentation === "modal" ? (
-            <s-color-field
+            <ColorTokenField
+              id="leaf-overlay-color"
               label="Overlay"
               alpha
               value={document.tokens.overlay}
-              onInput={(event) =>
-                onCommand({ type: "updateTokens", tokens: { overlay: valueOf(event) } }, "token-overlay")
+              onValue={(overlay) =>
+                onCommand({ type: "updateTokens", tokens: { overlay } }, "token-overlay")
               }
             />
           ) : null}
@@ -427,8 +507,7 @@ export function PropertyPanel({
             }
           />
         </s-stack>
-      </s-section>
-    </s-stack>
+    </s-section>
   );
 }
 

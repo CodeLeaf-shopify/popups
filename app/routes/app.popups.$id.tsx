@@ -21,7 +21,8 @@ type EditorRequest = {
 };
 
 function popupStatus(value: string): PopupStatus {
-  return value === "published" ? "published" : "draft";
+  if (value === "published" || value === "archived") return value;
+  return "draft";
 }
 
 function readPublishedPayload(status: PopupStatus, compiledPayload: string | null): StorefrontPayload | null {

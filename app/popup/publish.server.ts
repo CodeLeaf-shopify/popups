@@ -143,11 +143,10 @@ export async function setPopupStatus(
   admin: AdminClient,
   shop: string,
   popupId: string,
-  status: "draft",
+  status: "draft" | "archived",
 ): Promise<{ ok: true; updatedAt: string } | { ok: false; error: string }> {
   const existing = await prisma.popup.findFirst({ where: { id: popupId, shop } });
   if (!existing) return { ok: false, error: "Popup not found." };
-  await prisma.popup.updateMany({ where: { shop, status: "paused" }, data: { status: "draft" } });
   const updated = await prisma.popup.update({
     where: { id: popupId },
     data: { status },

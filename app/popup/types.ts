@@ -24,7 +24,7 @@ export const NODE_TYPES = [
 
 export type NodeType = (typeof NODE_TYPES)[number];
 export type PopupKind = "email" | "discount" | "exit" | "announcement";
-export type PopupStatus = "draft" | "published";
+export type PopupStatus = "draft" | "published" | "archived";
 export type Presentation = "modal" | "bar";
 export type Goal = "none" | "email" | "discount";
 export type Device = "desktop" | "mobile";
