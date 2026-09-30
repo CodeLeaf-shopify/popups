@@ -52,6 +52,7 @@ function documentFrom(tokens: Tokens, root: EditorNode, rest: EditorNode[]): Edi
 function baseBehavior(goal: Behavior["goal"], presentation: Behavior["presentation"]): Behavior {
   return {
     presentation,
+    barPosition: "top",
     trigger: { type: "immediate" },
     frequency: { type: "once" },
     schedule: { start: null, end: null },

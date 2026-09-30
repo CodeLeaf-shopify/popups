@@ -9,7 +9,7 @@ import { uploadPopupPayload } from "./files.server";
 import { ensureMetafieldDefinitions, writeShopManifest } from "./metafields.server";
 import { parseBehavior, parseEditorDocument, parsePayload } from "./parse";
 import type { AdminClient } from "./admin-graphql.server";
-import type { Behavior, EditorDocument, Manifest, ManifestCampaign } from "./types";
+import type { Behavior, EditorDocument, Manifest, ManifestCampaign, StorefrontPayload } from "./types";
 
 export function contentRevision(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
@@ -24,6 +24,7 @@ async function campaignFromPopup(popup: Popup): Promise<ManifestCampaign | null>
     id: popup.id,
     revision: popup.contentRevision,
     kind: payload.document.kind,
+    position: payload.document.position === "bottom" ? "bottom" : "top",
     priority: payload.behavior.priority,
     trigger: payload.behavior.trigger,
     frequency: payload.behavior.frequency,
@@ -96,7 +97,10 @@ export async function publishPopup(
   name: string,
   document: EditorDocument,
   behavior: Behavior,
-): Promise<{ ok: true; updatedAt: string; revision: string } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; updatedAt: string; revision: string; payload: StorefrontPayload; behavior: Behavior }
+  | { ok: false; error: string }
+> {
   const existing = await prisma.popup.findFirst({ where: { id: popupId, shop } });
   if (!existing) return { ok: false, error: "Popup not found." };
   const preview = compile(document, behavior);
@@ -126,17 +130,24 @@ export async function publishPopup(
   });
   const synced = await syncManifest(admin, shop);
   if (!synced.ok) return { ok: false, error: synced.error };
-  return { ok: true, updatedAt: updated.updatedAt.toISOString(), revision };
+  return {
+    ok: true,
+    updatedAt: updated.updatedAt.toISOString(),
+    revision,
+    payload: compiled.payload,
+    behavior: withCode,
+  };
 }
 
 export async function setPopupStatus(
   admin: AdminClient,
   shop: string,
   popupId: string,
-  status: "paused" | "draft",
+  status: "draft",
 ): Promise<{ ok: true; updatedAt: string } | { ok: false; error: string }> {
   const existing = await prisma.popup.findFirst({ where: { id: popupId, shop } });
   if (!existing) return { ok: false, error: "Popup not found." };
+  await prisma.popup.updateMany({ where: { shop, status: "paused" }, data: { status: "draft" } });
   const updated = await prisma.popup.update({
     where: { id: popupId },
     data: { status },

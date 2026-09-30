@@ -107,7 +107,7 @@
     }).catch(function () {});
   }
 
-  function showPayload(payload, campaign) {
+  function showPayload(payload, campaign, onClosed) {
     var element = host();
     var api = window.LeafPopups.mount(element, payload, {
       mode: "interact",
@@ -115,6 +115,7 @@
         if (campaign) remember(campaign.id, "dismissed");
         api.destroy();
         element.remove();
+        if (onClosed) onClosed();
       },
       onSubmit: function (detail) {
         return fetch(boot.proxy + "/submit", {
@@ -126,9 +127,26 @@
             consent: detail.consent,
             claim: detail.claim,
           }),
-        }).then(function (response) { return response.json(); }).then(function (result) {
-          if (result.state) writeLocal(result.state);
+        }).then(function (response) {
+          return response.text().then(function (text) {
+            var result = null;
+            try {
+              result = text ? JSON.parse(text) : null;
+            } catch (error) {
+              result = null;
+            }
+            if (!result || typeof result !== "object") {
+              return { ok: false, error: response.ok ? "Unexpected response. Please try again." : "We couldn't save that (" + response.status + "). Please try again." };
+            }
+            if (!response.ok && result.ok !== false) result.ok = false;
+            if (!result.ok && !result.error) result.error = "We couldn't save that. Please try again.";
+            return result;
+          });
+        }).then(function (result) {
+          if (result.ok && result.state) writeLocal(result.state);
           return result;
+        }).catch(function () {
+          return { ok: false, error: "Network error. Check your connection and try again." };
         });
       },
     });
@@ -170,17 +188,46 @@
     });
   }
 
-  function showCampaign(campaign) {
+  var NEXT_POPUP_DELAY_MS = 800;
+  var slots = {};
+
+  function slotKey(campaign, payload) {
+    var doc = payload && payload.document ? payload.document : {};
+    var kind = doc.kind || campaign.kind;
+    if (kind !== "bar") return "modal";
+    return (doc.position || campaign.position) === "bottom" ? "bar-bottom" : "bar-top";
+  }
+
+  function enqueue(campaign, payload) {
+    var key = slotKey(campaign, payload);
+    var slot = slots[key] || (slots[key] = { active: false, ready: [] });
+    slot.ready.push({ campaign: campaign, payload: payload });
+    slot.ready.sort(function (left, right) { return (right.campaign.priority || 0) - (left.campaign.priority || 0); });
+    if (!slot.active) showNext(key);
+  }
+
+  function showNext(key) {
+    var slot = slots[key];
+    if (!slot || slot.active || !slot.ready.length) return;
+    var next = slot.ready.shift();
+    slot.active = true;
+    if (typeof console !== "undefined") console.info("[Leaf Popups] showing", next.campaign.id, key);
+    showPayload(next.payload, next.campaign, function () {
+      slot.active = false;
+      window.setTimeout(function () { showNext(key); }, NEXT_POPUP_DELAY_MS);
+    });
+  }
+
+  function armCampaign(campaign) {
     whenReady(campaign).then(function () {
       return fetch(campaign.url, { credentials: "omit" });
     }).then(function (response) {
       if (!response.ok) throw new Error("Popup file request failed.");
       return response.json();
     }).then(function (payload) {
-      if (typeof console !== "undefined") console.info("[Leaf Popups] showing", campaign.id, campaign.kind);
-      showPayload(payload, campaign);
+      enqueue(campaign, payload);
     }).catch(function (error) {
-      if (typeof console !== "undefined") console.warn("[Leaf Popups]", error);
+      if (typeof console !== "undefined") console.warn("[Leaf Popups]", campaign.id, error);
     });
   }
 
@@ -256,9 +303,7 @@
         var state = mergedState();
         var matched = campaigns.filter(function (campaign) { return eligible(campaign, state); });
         matched.sort(function (left, right) { return (right.priority || 0) - (left.priority || 0); });
-        var modal = matched.find(function (campaign) { return campaign.kind === "modal"; });
-        var bar = matched.find(function (campaign) { return campaign.kind === "bar"; });
-        if (!modal && !bar) {
+        if (!matched.length) {
           running = false;
           if (typeof console !== "undefined") {
             console.info("[Leaf Popups] No eligible campaigns.", {
@@ -271,8 +316,7 @@
           return null;
         }
         return loadRenderer().then(function () {
-          if (bar) showCampaign(bar);
-          if (modal) showCampaign(modal);
+          matched.forEach(armCampaign);
         });
       })
       .catch(function (error) {

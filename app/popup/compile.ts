@@ -66,6 +66,7 @@ export function compile(
       document: {
         schemaVersion: SCHEMA_VERSION,
         kind: behavior.presentation,
+        position: behavior.barPosition === "bottom" ? "bottom" : "top",
         tokens: { ...document.tokens },
         root,
       },

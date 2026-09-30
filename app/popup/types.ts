@@ -24,7 +24,7 @@ export const NODE_TYPES = [
 
 export type NodeType = (typeof NODE_TYPES)[number];
 export type PopupKind = "email" | "discount" | "exit" | "announcement";
-export type PopupStatus = "draft" | "published" | "paused";
+export type PopupStatus = "draft" | "published";
 export type Presentation = "modal" | "bar";
 export type Goal = "none" | "email" | "discount";
 export type Device = "desktop" | "mobile";
@@ -71,6 +71,7 @@ export type CompiledNode = {
 export type CompiledDocument = {
   schemaVersion: number;
   kind: Presentation;
+  position: BarPosition;
   tokens: Tokens;
   root: CompiledNode;
 };
@@ -102,8 +103,11 @@ export type DiscountConfig = {
   shopifyDiscountId: string | null;
 };
 
+export type BarPosition = "top" | "bottom";
+
 export type Behavior = {
   presentation: Presentation;
+  barPosition: BarPosition;
   trigger: Trigger;
   frequency: Frequency;
   schedule: Schedule;
@@ -135,6 +139,7 @@ export type ManifestCampaign = {
   id: string;
   revision: string;
   kind: Presentation;
+  position?: BarPosition;
   priority: number;
   trigger: Trigger;
   frequency: Frequency;

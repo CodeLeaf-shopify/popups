@@ -76,6 +76,7 @@
     var current = payload;
     var settings = options || {};
     var statusMessage = "";
+    var completedForms = {};
     var dragId = null;
     var moved = false;
     var startX = 0;
@@ -94,15 +95,25 @@
         "* { box-sizing: border-box; }",
         ".overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2147483646; pointer-events: auto; }",
         ".bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2147483646; pointer-events: auto; }",
+        ".bar.bottom { top: auto; bottom: 0; }",
         ".panel { position: relative; max-width: calc(100% - 32px); pointer-events: auto; }",
         ".node { position: relative; }",
         ".node.selected { outline: 2px solid #2c6ecb; outline-offset: 2px; }",
         ".node.drop { outline: 2px dashed #2c6ecb; }",
         ".handle { position: absolute; top: 4px; left: 4px; z-index: 2; border: 0; border-radius: 4px; padding: 2px 6px; cursor: grab; background: #2c6ecb; color: #fff; font: 11px/1 sans-serif; }",
+        /* Content stays inert while editing; pointer-events inherits, so nested blocks and handles opt back in. */
         ".edit .content { pointer-events: none; }",
+        ".edit .node, .edit .handle { pointer-events: auto; }",
+        ".edit .node { cursor: pointer; }",
+        ".edit .node:hover { outline: 1px dashed rgba(44, 110, 203, 0.6); outline-offset: 2px; }",
+        ".edit .node.selected:hover { outline: 2px solid #2c6ecb; }",
         "button, input { font: inherit; }",
         ".field { display: flex; flex-direction: column; gap: 6px; }",
         ".message { margin: 0; font-size: 14px; }",
+        ".message[hidden] { display: none; }",
+        ".consent { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 1.4; cursor: pointer; }",
+        ".consent input { margin: 2px 0 0; flex: none; }",
+        "button:disabled { cursor: default; }",
       ].join("\n");
       shadow.appendChild(style);
 
@@ -116,7 +127,7 @@
       var tokens = current.document.tokens;
       var kind = current.document.kind;
       var shell = document.createElement("div");
-      shell.className = kind === "bar" ? "bar" : "overlay";
+      shell.className = kind === "bar" ? "bar" + (current.document.position === "bottom" ? " bottom" : "") : "overlay";
       if (kind !== "bar") shell.style.background = tokens.overlay;
       var panel = document.createElement("div");
       panel.className = "panel" + (settings.mode === "edit" ? " edit" : "");
@@ -129,6 +140,13 @@
       shell.appendChild(panel);
       shadow.appendChild(shell);
       renderNode(current.document.root, panel, true);
+      if (statusMessage && settings.mode === "interact") {
+        var message = document.createElement("p");
+        message.className = "message";
+        message.setAttribute("role", "status");
+        message.textContent = statusMessage;
+        panel.appendChild(message);
+      }
 
       if (kind !== "bar" && settings.mode === "interact") {
         shell.addEventListener("click", function (event) {
@@ -193,9 +211,19 @@
           content.style.alignItems = align(style.align);
           content.style.padding = (style.padding || 0) + "px";
         }
-        if (node.type === "form" && props.consentLabel) content.dataset.consent = String(props.consentLabel);
+        if (node.type === "form" && settings.mode === "interact" && completedForms[node.id]) {
+          var done = document.createElement("p");
+          done.className = "message";
+          done.setAttribute("role", "status");
+          done.textContent = completedForms[node.id];
+          content.appendChild(done);
+          return;
+        }
         (node.children || []).forEach(function (child) { renderNode(child, content, false); });
-        if (node.type === "form") bindForm(content);
+        if (node.type === "form") {
+          if (props.consentLabel) addConsent(content, String(props.consentLabel));
+          bindForm(content, node.id);
+        }
         return;
       }
 
@@ -297,7 +325,10 @@
           reveal.type = "button";
           reveal.textContent = "Reveal code";
           reveal.style.marginTop = "8px";
-          reveal.addEventListener("click", function () { submitForm(null, false, true); });
+          reveal.addEventListener("click", function () {
+            reveal.disabled = true;
+            claimCode();
+          });
           content.appendChild(reveal);
         }
         return;
@@ -354,9 +385,7 @@
         close.type = "button";
         close.textContent = "×";
         close.setAttribute("aria-label", "Close");
-        close.style.position = "absolute";
-        close.style.top = "8px";
-        close.style.right = "8px";
+        close.style.display = "block";
         close.style.border = "0";
         close.style.background = "transparent";
         close.style.color = "inherit";
@@ -367,68 +396,116 @@
       }
     }
 
-    function bindForm(content) {
-      if (settings.mode !== "interact") return;
-      var button = content.querySelector("button");
-      if (button) button.type = "button";
-      if (!button) return;
-      button.addEventListener("click", function (event) {
-        event.preventDefault();
-        var input = content.querySelector("input[type=email]");
-        if (input && !input.value) {
-          input.reportValidity();
-          return;
-        }
-        var consent = content.dataset.consent;
-        if (consent) {
-          var box = content.querySelector("[data-consent-box]");
-          if (!box) {
-            ensureConsent(content, consent);
-            return;
-          }
-          if (!box.checked) return;
-        }
-        submitForm(input ? input.value : "", Boolean(consent), false);
-      });
-    }
-
-    function ensureConsent(content, label) {
-      var existing = content.querySelector("[data-consent-box]");
-      if (existing) return existing.checked;
+    function addConsent(content, label) {
       var row = document.createElement("label");
-      row.className = "field";
+      row.className = "consent";
       var box = document.createElement("input");
       box.type = "checkbox";
       box.dataset.consentBox = "true";
+      if (settings.mode === "edit") box.disabled = true;
       var text = document.createElement("span");
       text.textContent = label;
       row.appendChild(box);
       row.appendChild(text);
-      content.insertBefore(row, content.querySelector("button"));
-      return false;
+      var anchor = Array.prototype.find.call(content.children, function (child) {
+        return child.dataset && child.dataset.leafType === "button";
+      });
+      content.insertBefore(row, anchor || null);
+    }
+
+    function bindForm(content, formId) {
+      if (settings.mode !== "interact") return;
+      var button = content.querySelector("button");
+      if (!button) return;
+      button.type = "button";
+      var input = content.querySelector("input[type=email]");
+      var status = document.createElement("p");
+      status.className = "message";
+      status.setAttribute("role", "alert");
+      status.hidden = true;
+      content.appendChild(status);
+
+      function send() {
+        if (button.disabled) return;
+        if (input && !input.checkValidity()) {
+          input.reportValidity();
+          return;
+        }
+        var box = content.querySelector("[data-consent-box]");
+        status.hidden = true;
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.style.opacity = "0.6";
+        button.style.cursor = "progress";
+        submitForm(input ? input.value : "", Boolean(box && box.checked), false).then(function (result) {
+          if (result.ok) {
+            completedForms[formId] = result.text;
+            render();
+            return;
+          }
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+          button.style.opacity = "";
+          button.style.cursor = "pointer";
+          status.textContent = result.text;
+          status.hidden = false;
+        });
+      }
+
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        send();
+      });
+      if (input) {
+        input.addEventListener("keydown", function (event) {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          send();
+        });
+      }
+    }
+
+    function applyResult(result) {
+      if (result && result.code && current.document) {
+        current = {
+          schemaVersion: current.schemaVersion,
+          document: Object.assign({}, current.document, { root: patchCode(current.document.root, result.code) }),
+          behavior: current.behavior,
+        };
+      }
     }
 
     function submitForm(email, consent, claim) {
-      if (!settings.onSubmit) return;
-      Promise.resolve(settings.onSubmit({ email: email, consent: consent, claim: claim })).then(function (result) {
-        statusMessage = result && result.message ? result.message : result && result.ok ? "Done." : "Something went wrong.";
-        if (result && result.code && current.document) {
-          current = {
-            schemaVersion: current.schemaVersion,
-            document: Object.assign({}, current.document, { root: patchCode(current.document.root, result.code) }),
-            behavior: current.behavior,
-          };
-        }
-        render();
-        var message = document.createElement("p");
-        message.className = "message";
-        message.textContent = statusMessage;
-        var panel = shadow.querySelector(".panel");
-        if (panel) panel.appendChild(message);
-      }).catch(function () {
-        statusMessage = "Something went wrong.";
+      if (!settings.onSubmit) return Promise.resolve({ ok: false, text: "This popup cannot be submitted here." });
+      return Promise.resolve()
+        .then(function () { return settings.onSubmit({ email: email, consent: consent, claim: claim }); })
+        .then(function (result) {
+          var ok = Boolean(result && result.ok);
+          var text = (result && (result.error || result.message)) || (ok ? "Thanks!" : "Something went wrong. Please try again.");
+          if (ok) applyResult(result);
+          return { ok: ok, text: text };
+        })
+        .catch(function () {
+          return { ok: false, text: "Something went wrong. Please try again." };
+        });
+    }
+
+    function claimCode() {
+      submitForm(null, false, true).then(function (result) {
+        statusMessage = result.ok && findCode(current.document.root) ? "" : result.text;
         render();
       });
+    }
+
+    function findCode(node) {
+      if (!node) return "";
+      if (node.type === "coupon" && node.props && node.props.code) return String(node.props.code);
+      var children = node.children || [];
+      for (var i = 0; i < children.length; i += 1) {
+        var code = findCode(children[i]);
+        if (code) return code;
+      }
+      return "";
     }
 
     function closePopup() {
@@ -531,14 +608,11 @@
       update: function (nextPayload, nextOptions) {
         current = nextPayload;
         settings = nextOptions || settings;
-        render();
-        if (statusMessage) {
-          var message = document.createElement("p");
-          message.className = "message";
-          message.textContent = statusMessage;
-          var panel = shadow.querySelector(".panel");
-          if (panel) panel.appendChild(message);
+        if (settings.mode !== "interact") {
+          completedForms = {};
+          statusMessage = "";
         }
+        render();
       },
       destroy: function () {
         shadow.dispatchEvent(new Event("leaf-destroy"));

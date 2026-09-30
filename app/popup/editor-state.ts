@@ -2,7 +2,7 @@ import { applyCommand } from "./commands";
 import type { Behavior, Command, EditorDocument, PopupStatus } from "./types";
 
 export type EditorMode = "edit" | "interact";
-export type EditorDevice = "desktop" | "mobile";
+export type EditorDevice = "desktop" | "tablet" | "mobile";
 
 export type EditorSnapshot = {
   document: EditorDocument;
@@ -38,6 +38,7 @@ export type EditorState = {
 export type EditorAction =
   | { type: "command"; command: Command; coalesceKey?: string }
   | { type: "behavior"; behavior: Behavior; coalesceKey?: string }
+  | { type: "replaceBehavior"; behavior: Behavior }
   | { type: "rename"; name: string }
   | { type: "select"; id: string | null }
   | { type: "mode"; mode: EditorMode }
@@ -117,10 +118,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         document: result.document,
         session: {
           ...pushPast(state, action.coalesceKey),
-          selectedId: selectedStillExists,
+          selectedId: result.insertedId ?? selectedStillExists,
         },
       };
     }
+    case "replaceBehavior":
+      return { ...state, behavior: action.behavior };
     case "behavior":
       return {
         ...state,

@@ -10,12 +10,20 @@ function secret(): string {
   return value;
 }
 
-export function signPreviewToken(shop: string, popupId: string): string {
+export function signPreviewToken(shop: string, popupId: string, exp = Date.now() + TTL_MS): string {
   const payload = Buffer.from(
-    JSON.stringify({ shop, popupId, exp: Date.now() + TTL_MS } satisfies PreviewClaims),
+    JSON.stringify({ shop, popupId, exp } satisfies PreviewClaims),
   ).toString("base64url");
   const signature = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
+}
+
+export type PreviewLink = { url: string; expiresAt: number };
+
+export function previewLink(shop: string, popupId: string): PreviewLink {
+  const expiresAt = Date.now() + TTL_MS;
+  const token = signPreviewToken(shop, popupId, expiresAt);
+  return { url: `https://${shop}/?leaf_preview=${encodeURIComponent(token)}`, expiresAt };
 }
 
 export function verifyPreviewToken(token: string, shop: string): { popupId: string } | null {

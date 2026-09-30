@@ -2,9 +2,12 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
 import { compile } from "../popup/compile";
-import { createEditorState, editorReducer } from "../popup/editor-state";
-import type { Behavior, Command, EditorDocument, PopupStatus } from "../popup/types";
+import { createEditorState, editorReducer, type EditorDevice } from "../popup/editor-state";
+import { stableStringify } from "../popup/stable-stringify";
+import type { Behavior, Command, EditorDocument, PopupStatus, StorefrontPayload } from "../popup/types";
 import { PropertyPanel } from "./PropertyPanel";
+
+type PreviewLink = { url: string; expiresAt: number };
 
 type SaveResponse = {
   ok: boolean;
@@ -13,8 +16,9 @@ type SaveResponse = {
   updatedAt?: string;
   clientKey?: string;
   status?: PopupStatus;
-  token?: string;
-  shop?: string;
+  preview?: PreviewLink;
+  payload?: StorefrontPayload;
+  behavior?: Behavior;
 };
 
 type PopupEditorProps = {
@@ -29,7 +33,17 @@ type PopupEditorProps = {
     shop: string;
   };
   updatedAt: string;
+  publishedPayload: StorefrontPayload | null;
+  preview: PreviewLink;
 };
+
+const DEVICE_WIDTHS: Record<EditorDevice, number | string> = {
+  desktop: "100%",
+  tablet: 820,
+  mobile: 390,
+};
+
+const PREVIEW_REFRESH_MARGIN_MS = 60_000;
 
 function draftKey(name: string, document: EditorDocument, behavior: Behavior): string {
   return JSON.stringify({ name, document, behavior });
@@ -41,6 +55,8 @@ export function PopupEditor({
   initialBehavior,
   meta,
   updatedAt,
+  publishedPayload: initialPublishedPayload,
+  preview: initialPreview,
 }: PopupEditorProps) {
   const [editor, dispatch] = useReducer(
     editorReducer,
@@ -48,14 +64,26 @@ export function PopupEditor({
     (initial) => createEditorState(initial),
   );
   const saveFetcher = useFetcher<SaveResponse>();
-  const actionFetcher = useFetcher<SaveResponse>();
+  const publishFetcher = useFetcher<SaveResponse>();
+  const statusFetcher = useFetcher<SaveResponse>();
+  const previewFetcher = useFetcher<SaveResponse>();
   const saveFetcherRef = useRef(saveFetcher);
+  const previewFetcherRef = useRef(previewFetcher);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const [publishedDraft, setPublishedDraft] = useState<{
+    name: string;
+    document: EditorDocument;
+    behavior: Behavior;
+  } | null>(null);
   const [savedAt, setSavedAt] = useState(updatedAt);
   const [savedKey, setSavedKey] = useState(() => draftKey(meta.name, initialDocument, initialBehavior));
   const [conflict, setConflict] = useState<string | null>(null);
+  const [publishedPayload, setPublishedPayload] = useState(initialPublishedPayload);
+  const [preview, setPreview] = useState(initialPreview);
   const [seenSave, setSeenSave] = useState(saveFetcher.data);
-  const [seenAction, setSeenAction] = useState(actionFetcher.data);
+  const [seenPublish, setSeenPublish] = useState(publishFetcher.data);
+  const [seenStatus, setSeenStatus] = useState(statusFetcher.data);
+  const [seenPreview, setSeenPreview] = useState(previewFetcher.data);
   const key = draftKey(editor.meta.name, editor.document, editor.behavior);
   const compiled = useMemo(
     () => compile(editor.document, editor.behavior),
@@ -94,18 +122,65 @@ export function PopupEditor({
     }
   }
 
-  if (actionFetcher.data !== seenAction) {
-    setSeenAction(actionFetcher.data);
-    const data = actionFetcher.data;
-    if (data?.ok && data.updatedAt) setSavedAt(data.updatedAt);
-    if (data?.ok && data.clientKey) setSavedKey(data.clientKey);
-    if (data?.ok && data.status) dispatch({ type: "status", status: data.status });
-    if (data && !data.ok && data.error) setConflict(data.error);
-    if (data?.ok && data.intent !== "preview-link") setConflict(null);
+  if (publishFetcher.data !== seenPublish) {
+    setSeenPublish(publishFetcher.data);
+    const data = publishFetcher.data;
+    const submitted = publishedDraft;
+    if (data?.ok) {
+      if (data.updatedAt) setSavedAt(data.updatedAt);
+      if (data.status) dispatch({ type: "status", status: data.status });
+      if (data.payload) setPublishedPayload(data.payload);
+      const serverBehavior = data.behavior;
+      if (serverBehavior && submitted) {
+        if (stableStringify(editor.behavior) === stableStringify(submitted.behavior)) {
+          dispatch({ type: "replaceBehavior", behavior: serverBehavior });
+        } else if (
+          editor.behavior.discount &&
+          serverBehavior.discount &&
+          editor.behavior.discount.mode === serverBehavior.discount.mode &&
+          (!editor.behavior.discount.code || editor.behavior.discount.code === serverBehavior.discount.code)
+        ) {
+          dispatch({
+            type: "replaceBehavior",
+            behavior: {
+              ...editor.behavior,
+              discount: {
+                ...editor.behavior.discount,
+                code: serverBehavior.discount.code,
+                shopifyDiscountId: serverBehavior.discount.shopifyDiscountId,
+              },
+            },
+          });
+        }
+        setSavedKey(draftKey(submitted.name, submitted.document, serverBehavior));
+      }
+      setConflict(null);
+    } else if (data?.error) {
+      setConflict(data.error);
+    }
+  }
+
+  if (statusFetcher.data !== seenStatus) {
+    setSeenStatus(statusFetcher.data);
+    const data = statusFetcher.data;
+    if (data?.ok) {
+      if (data.updatedAt) setSavedAt(data.updatedAt);
+      if (data.status) dispatch({ type: "status", status: data.status });
+      if (data.status !== "published") setPublishedPayload(null);
+      setConflict(null);
+    } else if (data?.error) {
+      setConflict(data.error);
+    }
+  }
+
+  if (previewFetcher.data !== seenPreview) {
+    setSeenPreview(previewFetcher.data);
+    if (previewFetcher.data?.ok && previewFetcher.data.preview) setPreview(previewFetcher.data.preview);
   }
 
   useEffect(() => {
     saveFetcherRef.current = saveFetcher;
+    previewFetcherRef.current = previewFetcher;
     previewRef.current = {
       payload: compiled.ok ? compiled.payload : null,
       mode: editor.session.mode,
@@ -143,8 +218,10 @@ export function PopupEditor({
     postPreview();
   }, [compiled, editor.session.mode, editor.session.selectedId]);
 
+  const busy = publishFetcher.state !== "idle" || statusFetcher.state !== "idle";
+
   useEffect(() => {
-    if (key === savedKey || actionFetcher.state !== "idle") return;
+    if (key === savedKey || busy) return;
     const timer = window.setTimeout(() => {
       const draft = draftRef.current;
       submit(saveFetcherRef.current, {
@@ -157,127 +234,171 @@ export function PopupEditor({
       });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [key, savedKey, savedAt, actionFetcher.state]);
+  }, [key, savedKey, savedAt, busy]);
 
-  const previewUrl =
-    actionFetcher.data?.intent === "preview-link" && actionFetcher.data.token && actionFetcher.data.shop
-      ? `https://${actionFetcher.data.shop}/?leaf_preview=${encodeURIComponent(actionFetcher.data.token)}`
-      : null;
+  useEffect(() => {
+    const refresh = () => submit(previewFetcherRef.current, { intent: "preview-link" });
+    const delay = preview.expiresAt - PREVIEW_REFRESH_MARGIN_MS - Date.now();
+    if (delay <= 0) {
+      refresh();
+      return;
+    }
+    const timer = window.setTimeout(refresh, delay);
+    return () => window.clearTimeout(timer);
+  }, [preview.expiresAt]);
+
   const saving = saveFetcher.state !== "idle";
-  const statusLabel =
-    editor.meta.status === "published" ? "Published" : editor.meta.status === "paused" ? "Paused" : "Draft";
+  const unsaved = key !== savedKey;
+  const published = editor.meta.status === "published";
+  const hasChanges =
+    !published ||
+    !publishedPayload ||
+    !compiled.ok ||
+    stableStringify(compiled.payload) !== stableStringify(publishedPayload);
 
-  return (
-    <s-page heading={editor.meta.name || "Popup"}>
+  function publish() {
+    setPublishedDraft({
+      name: editor.meta.name,
+      document: editor.document,
+      behavior: editor.behavior,
+    });
+    submit(publishFetcher, {
+      intent: "publish",
+      name: editor.meta.name,
+      document: editor.document,
+      behavior: editor.behavior,
+      updatedAt: savedAt,
+      clientKey: key,
+    });
+  }
+
+  function unpublish() {
+    submit(statusFetcher, { intent: "unpublish", updatedAt: savedAt });
+  }
+
+  const unpublishLoading = statusFetcher.state !== "idle" ? { loading: true } : {};
+  const primaryAction =
+    published && !hasChanges ? (
+      <s-button slot="primary-action" variant="primary" {...unpublishLoading} onClick={unpublish}>
+        Unpublish
+      </s-button>
+    ) : (
       <s-button
         slot="primary-action"
         variant="primary"
-        {...(actionFetcher.state !== "idle" ? { loading: true } : {})}
-        onClick={() =>
-          submit(actionFetcher, {
-            intent: "publish",
-            name: editor.meta.name,
-            document: editor.document,
-            behavior: editor.behavior,
-            updatedAt: savedAt,
-            clientKey: key,
-          })
-        }
+        {...(publishFetcher.state !== "idle" ? { loading: true } : {})}
+        {...(!compiled.ok || statusFetcher.state !== "idle" ? { disabled: true } : {})}
+        onClick={publish}
       >
-        Publish
+        {published ? "Publish changes" : "Publish"}
       </s-button>
+    );
+
+  return (
+    <s-page heading={editor.meta.name || "Popup"} inlineSize="large">
+      {primaryAction}
+      {published && hasChanges ? (
+        <s-button
+          slot="secondary-actions"
+          {...unpublishLoading}
+          {...(publishFetcher.state !== "idle" ? { disabled: true } : {})}
+          onClick={unpublish}
+        >
+          Unpublish
+        </s-button>
+      ) : null}
+      <s-button
+        slot="secondary-actions"
+        icon="view"
+        href={preview.url}
+        target="_blank"
+        {...(unsaved || saving ? { disabled: true } : {})}
+      >
+        Preview
+      </s-button>
+      <s-button
+        slot="secondary-actions"
+        icon="undo"
+        accessibilityLabel="Undo"
+        onClick={() => dispatch({ type: "undo" })}
+        {...(editor.session.past.length === 0 ? { disabled: true } : {})}
+      />
+      <s-button
+        slot="secondary-actions"
+        icon="redo"
+        accessibilityLabel="Redo"
+        onClick={() => dispatch({ type: "redo" })}
+        {...(editor.session.future.length === 0 ? { disabled: true } : {})}
+      />
       <s-stack direction="block" gap="base">
         {conflict ? <s-banner tone="critical">{conflict}</s-banner> : null}
         {!compiled.ok ? <s-banner tone="warning">{compiled.error}</s-banner> : null}
-        <s-stack direction="inline" gap="base">
-          <s-badge
-            tone={editor.meta.status === "published" ? "success" : editor.meta.status === "paused" ? "warning" : "info"}
-          >
-            {statusLabel}
-          </s-badge>
-          <s-text>{saving ? "Saving…" : key === savedKey ? "Saved" : "Unsaved changes"}</s-text>
-        </s-stack>
-        <s-text-field
-          label="Name"
-          value={editor.meta.name}
-          onInput={(event) => {
-            const target = event.currentTarget as { value?: string };
-            dispatch({ type: "rename", name: target.value ?? "" });
-          }}
-        />
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={() => dispatch({ type: "undo" })}
-            {...(editor.session.past.length === 0 ? { disabled: true } : {})}
-          >
-            Undo
-          </s-button>
-          <s-button
-            onClick={() => dispatch({ type: "redo" })}
-            {...(editor.session.future.length === 0 ? { disabled: true } : {})}
-          >
-            Redo
-          </s-button>
-          <s-button
-            variant={editor.session.mode === "edit" ? "primary" : "secondary"}
-            onClick={() => dispatch({ type: "mode", mode: "edit" })}
-          >
-            Edit
-          </s-button>
-          <s-button
-            variant={editor.session.mode === "interact" ? "primary" : "secondary"}
-            onClick={() => dispatch({ type: "mode", mode: "interact" })}
-          >
-            Interact
-          </s-button>
-          <s-button
-            variant={editor.session.device === "desktop" ? "primary" : "secondary"}
-            onClick={() => dispatch({ type: "device", device: "desktop" })}
-          >
-            Desktop
-          </s-button>
-          <s-button
-            variant={editor.session.device === "mobile" ? "primary" : "secondary"}
-            onClick={() => dispatch({ type: "device", device: "mobile" })}
-          >
-            Mobile
-          </s-button>
-          <s-button onClick={() => submit(actionFetcher, { intent: "preview-link" })}>
-            Storefront preview link
-          </s-button>
-          {editor.meta.status === "published" ? (
-            <s-button onClick={() => submit(actionFetcher, { intent: "pause", updatedAt: savedAt })}>
-              Pause
-            </s-button>
-          ) : null}
-          {editor.meta.status !== "draft" ? (
-            <s-button onClick={() => submit(actionFetcher, { intent: "unpublish", updatedAt: savedAt })}>
-              Unpublish
-            </s-button>
-          ) : null}
-        </s-stack>
-        {previewUrl ? (
-          <s-link href={previewUrl} target="_blank">
-            Open this draft on your theme
-          </s-link>
-        ) : null}
-        <s-grid gridTemplateColumns="minmax(0, 1fr) 320px" gap="base">
-          <s-box background="subdued" padding="base" borderRadius="base">
-            <iframe
-              title="Popup preview"
-              ref={frameRef}
-              sandbox="allow-scripts"
-              srcDoc={srcDoc}
-              onLoad={() => postPreview()}
-              style={{
-                width: editor.session.device === "mobile" ? 390 : "100%",
-                height: 680,
-                border: 0,
-                background: "#ececec",
-              }}
-            />
-          </s-box>
-          <s-box padding="base" borderWidth="base" borderRadius="base">
+        <s-query-container>
+          <s-grid gridTemplateColumns="@container (inline-size > 860px) minmax(0, 1fr) 360px, minmax(0, 1fr)" gap="base">
+            <s-section>
+              <s-stack direction="block" gap="base">
+                <s-grid gridTemplateColumns="@container (inline-size > 560px) minmax(0, 1fr) auto, minmax(0, 1fr)" gap="base" alignItems="end">
+                  <s-text-field
+                    label="Name"
+                    value={editor.meta.name}
+                    onInput={(event) => {
+                      const target = event.currentTarget as { value?: string };
+                      dispatch({ type: "rename", name: target.value ?? "" });
+                    }}
+                  />
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <s-badge tone={published ? "success" : "info"}>{published ? "Published" : "Draft"}</s-badge>
+                    {published && hasChanges ? <s-badge tone="warning">Unpublished changes</s-badge> : null}
+                    <s-text color="subdued">{saving ? "Saving…" : unsaved ? "Unsaved changes" : "Saved"}</s-text>
+                  </s-stack>
+                </s-grid>
+                <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
+                  <s-button-group gap="none" accessibilityLabel="Preview mode">
+                    <s-button
+                      variant={editor.session.mode === "edit" ? "primary" : "secondary"}
+                      onClick={() => dispatch({ type: "mode", mode: "edit" })}
+                    >
+                      Edit
+                    </s-button>
+                    <s-button
+                      variant={editor.session.mode === "interact" ? "primary" : "secondary"}
+                      onClick={() => dispatch({ type: "mode", mode: "interact" })}
+                    >
+                      Interact
+                    </s-button>
+                  </s-button-group>
+                  <s-button-group gap="none" accessibilityLabel="Preview device">
+                    {(["desktop", "tablet", "mobile"] as const).map((device) => (
+                      <s-button
+                        key={device}
+                        icon={device}
+                        accessibilityLabel={device.charAt(0).toUpperCase() + device.slice(1)}
+                        variant={editor.session.device === device ? "primary" : "secondary"}
+                        onClick={() => dispatch({ type: "device", device })}
+                      />
+                    ))}
+                  </s-button-group>
+                </s-stack>
+                <s-box background="subdued" padding="base" borderRadius="base">
+                  <iframe
+                    title="Popup preview"
+                    ref={frameRef}
+                    sandbox="allow-scripts"
+                    srcDoc={srcDoc}
+                    onLoad={() => postPreview()}
+                    style={{
+                      display: "block",
+                      margin: "0 auto",
+                      width: DEVICE_WIDTHS[editor.session.device],
+                      maxWidth: "100%",
+                      height: "min(720px, 75vh)",
+                      border: 0,
+                      background: "#ececec",
+                    }}
+                  />
+                </s-box>
+              </s-stack>
+            </s-section>
             <PropertyPanel
               document={editor.document}
               behavior={editor.behavior}
@@ -285,9 +406,10 @@ export function PopupEditor({
               commandError={editor.session.commandError}
               onCommand={(command, coalesceKey) => dispatch({ type: "command", command, coalesceKey })}
               onBehavior={(behavior, coalesceKey) => dispatch({ type: "behavior", behavior, coalesceKey })}
+              onSelect={(id) => dispatch({ type: "select", id })}
             />
-          </s-box>
-        </s-grid>
+          </s-grid>
+        </s-query-container>
       </s-stack>
     </s-page>
   );

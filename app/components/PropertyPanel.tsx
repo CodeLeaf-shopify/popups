@@ -1,6 +1,5 @@
-import { useState } from "react";
-
 import { canContain, NODE_LABELS, NODE_TYPES, type Behavior, type Command, type EditorDocument, type NodeType } from "../popup/types";
+import { LayersPanel } from "./LayersPanel";
 
 type PropertyPanelProps = {
   document: EditorDocument;
@@ -9,6 +8,7 @@ type PropertyPanelProps = {
   commandError: string | null;
   onCommand: (command: Command, coalesceKey?: string) => void;
   onBehavior: (behavior: Behavior, coalesceKey?: string) => void;
+  onSelect: (id: string) => void;
 };
 
 function valueOf(event: Event): string {
@@ -16,9 +16,40 @@ function valueOf(event: Event): string {
   return target?.value ?? "";
 }
 
-function numberValue(value: string, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+type NumberInputProps = {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  suffix?: string;
+  details?: string;
+  onValue: (value: number) => void;
+};
+
+function NumberInput({ label, value, min, max, step = 1, suffix, details, onValue }: NumberInputProps) {
+  const inRange = (next: number) => (min === undefined || next >= min) && (max === undefined || next <= max);
+  const clamp = (next: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, next));
+  return (
+    <s-number-field
+      label={label}
+      value={String(value)}
+      step={step}
+      {...(min !== undefined ? { min } : {})}
+      {...(max !== undefined ? { max } : {})}
+      {...(suffix ? { suffix } : {})}
+      {...(details ? { details } : {})}
+      onInput={(event) => {
+        const raw = valueOf(event);
+        const next = Number(raw);
+        if (raw !== "" && Number.isFinite(next) && inRange(next)) onValue(next);
+      }}
+      onChange={(event) => {
+        const next = Number(valueOf(event));
+        onValue(Number.isFinite(next) ? clamp(next) : value);
+      }}
+    />
+  );
 }
 
 export function PropertyPanel({
@@ -28,6 +59,7 @@ export function PropertyPanel({
   commandError,
   onCommand,
   onBehavior,
+  onSelect,
 }: PropertyPanelProps) {
   const selected = selectedId ? document.nodes[selectedId] : null;
   const parent = selected?.parentId ? document.nodes[selected.parentId] : null;
@@ -38,340 +70,364 @@ export function PropertyPanel({
 
   return (
     <s-stack direction="block" gap="base">
-      {commandError ? <s-banner tone="critical">{commandError}</s-banner> : null}
-
-      <s-heading>Popup</s-heading>
-      <s-select
-        label="Shows as"
-        value={behavior.presentation}
-        onChange={(event) =>
-          onBehavior(
-            { ...behavior, presentation: valueOf(event) === "bar" ? "bar" : "modal" },
-            "presentation",
-          )
-        }
-      >
-        <s-option value="modal">Modal</s-option>
-        <s-option value="bar">Announcement bar</s-option>
-      </s-select>
-      <s-select
-        label="Goal"
-        value={behavior.goal}
-        onChange={(event) => {
-          const goal = valueOf(event);
-          const nextGoal = goal === "email" || goal === "discount" ? goal : "none";
-          onBehavior(
-            {
-              ...behavior,
-              goal: nextGoal,
-              discount:
-                nextGoal === "discount"
-                  ? behavior.discount ?? {
-                      mode: "shared",
-                      percentage: 10,
-                      code: null,
-                      shopifyDiscountId: null,
+      <s-section heading={selected ? selected.name : "Selected block"}>
+        <s-stack direction="block" gap="base">
+          {commandError ? <s-banner tone="critical">{commandError}</s-banner> : null}
+          {selected ? (
+            <>
+              <s-text color="subdued">{NODE_LABELS[selected.type]}</s-text>
+              <NodeFields
+                nodeId={selected.id}
+                type={selected.type}
+                nodeProps={selected.props}
+                style={selected.style}
+                onCommand={onCommand}
+              />
+              <s-stack direction="inline" gap="small-200">
+                {addTypes.length > 0 ? (
+                  <AddBlock
+                    types={addTypes}
+                    onAdd={(nodeType) =>
+                      onCommand({
+                        type: "insert",
+                        parentId: selected.id,
+                        index: selected.childIds.length,
+                        nodeType,
+                      })
                     }
-                  : null,
-            },
-            "goal",
-          );
-        }}
-      >
-        <s-option value="none">Announcement</s-option>
-        <s-option value="email">Email capture</s-option>
-        <s-option value="discount">Discount</s-option>
-      </s-select>
-      <s-select
-        label="Trigger"
-        value={behavior.trigger.type}
-        onChange={(event) => {
-          const type = valueOf(event);
-          const trigger =
-            type === "delay"
-              ? { type: "delay" as const, seconds: 5 }
-              : type === "scroll"
-                ? { type: "scroll" as const, percent: 40 }
-                : type === "exit"
-                  ? { type: "exit" as const }
-                  : { type: "immediate" as const };
-          onBehavior({ ...behavior, trigger }, "trigger");
-        }}
-      >
-        <s-option value="immediate">Immediately</s-option>
-        <s-option value="delay">After a delay</s-option>
-        <s-option value="scroll">After scroll</s-option>
-        <s-option value="exit">Exit intent</s-option>
-      </s-select>
-      {behavior.trigger.type === "delay" ? (
-        <s-text-field
-          label="Delay in seconds"
-          value={String(behavior.trigger.seconds)}
-          onInput={(event) =>
-            onBehavior(
-              { ...behavior, trigger: { type: "delay", seconds: numberValue(valueOf(event), 0) } },
-              "delay",
-            )
-          }
-        />
-      ) : null}
-      {behavior.trigger.type === "scroll" ? (
-        <s-text-field
-          label="Scroll percent"
-          value={String(behavior.trigger.percent)}
-          onInput={(event) =>
-            onBehavior(
-              { ...behavior, trigger: { type: "scroll", percent: numberValue(valueOf(event), 0) } },
-              "scroll",
-            )
-          }
-        />
-      ) : null}
-      <s-select
-        label="Frequency"
-        value={behavior.frequency.type}
-        onChange={(event) => {
-          const type = valueOf(event);
-          const frequency =
-            type === "once"
-              ? { type: "once" as const }
-              : type === "days"
-                ? { type: "days" as const, days: 7 }
-                : { type: "always" as const };
-          onBehavior({ ...behavior, frequency }, "frequency");
-        }}
-      >
-        <s-option value="always">Every visit</s-option>
-        <s-option value="once">Once</s-option>
-        <s-option value="days">Every few days</s-option>
-      </s-select>
-      {behavior.frequency.type === "days" ? (
-        <s-text-field
-          label="Days between views"
-          value={String(behavior.frequency.days)}
-          onInput={(event) =>
-            onBehavior(
-              { ...behavior, frequency: { type: "days", days: numberValue(valueOf(event), 1) } },
-              "days",
-            )
-          }
-        />
-      ) : null}
-      <s-text-field
-        label="Priority"
-        value={String(behavior.priority)}
-        details="Higher numbers win when more than one popup matches."
-        onInput={(event) =>
-          onBehavior({ ...behavior, priority: numberValue(valueOf(event), 0) }, "priority")
-        }
-      />
-      <s-text-field
-        label="Include paths"
-        value={behavior.targeting.include.join(", ")}
-        details="Comma-separated. Leave blank for every page."
-        onInput={(event) =>
-          onBehavior(
-            {
-              ...behavior,
-              targeting: { ...behavior.targeting, include: splitList(valueOf(event)) },
-            },
-            "include",
-          )
-        }
-      />
-      <s-text-field
-        label="Exclude paths"
-        value={behavior.targeting.exclude.join(", ")}
-        onInput={(event) =>
-          onBehavior(
-            {
-              ...behavior,
-              targeting: { ...behavior.targeting, exclude: splitList(valueOf(event)) },
-            },
-            "exclude",
-          )
-        }
-      />
-      {behavior.goal === "discount" && behavior.discount ? (
+                  />
+                ) : null}
+                {parent && selected.id !== document.rootId ? (
+                  <>
+                    <s-button
+                      icon="arrow-up"
+                      accessibilityLabel="Move up"
+                      {...(siblingIndex <= 0 ? { disabled: true } : {})}
+                      onClick={() =>
+                        onCommand({
+                          type: "move",
+                          nodeId: selected.id,
+                          parentId: parent.id,
+                          index: siblingIndex - 1,
+                        })
+                      }
+                    />
+                    <s-button
+                      icon="arrow-down"
+                      accessibilityLabel="Move down"
+                      {...(siblingIndex >= parent.childIds.length - 1 ? { disabled: true } : {})}
+                      onClick={() =>
+                        onCommand({
+                          type: "move",
+                          nodeId: selected.id,
+                          parentId: parent.id,
+                          index: siblingIndex + 1,
+                        })
+                      }
+                    />
+                    <s-button
+                      icon="duplicate"
+                      accessibilityLabel="Duplicate"
+                      onClick={() => onCommand({ type: "duplicate", nodeId: selected.id })}
+                    />
+                    <s-button
+                      icon="delete"
+                      tone="critical"
+                      accessibilityLabel="Delete"
+                      onClick={() => onCommand({ type: "delete", nodeId: selected.id })}
+                    />
+                  </>
+                ) : null}
+              </s-stack>
+            </>
+          ) : (
+            <s-paragraph>Select a block in the preview or in Layers to edit it.</s-paragraph>
+          )}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Layers">
+        <LayersPanel document={document} selectedId={selectedId} onSelect={onSelect} />
+      </s-section>
+
+      <s-section heading="Popup settings">
         <s-stack direction="block" gap="base">
           <s-select
-            label="Discount codes"
-            value={behavior.discount.mode}
+            label="Shows as"
+            value={behavior.presentation}
             onChange={(event) =>
               onBehavior(
-                {
-                  ...behavior,
-                  discount: {
-                    ...behavior.discount!,
-                    mode: valueOf(event) === "unique" ? "unique" : "shared",
-                  },
-                },
-                "discount-mode",
+                { ...behavior, presentation: valueOf(event) === "bar" ? "bar" : "modal" },
+                "presentation",
               )
             }
           >
-            <s-option value="shared">One public code</s-option>
-            <s-option value="unique">Unique code per customer</s-option>
+            <s-option value="modal">Modal</s-option>
+            <s-option value="bar">Announcement bar</s-option>
           </s-select>
+          {behavior.presentation === "bar" ? (
+            <s-select
+              label="Position"
+              value={behavior.barPosition}
+              onChange={(event) =>
+                onBehavior(
+                  { ...behavior, barPosition: valueOf(event) === "bottom" ? "bottom" : "top" },
+                  "bar-position",
+                )
+              }
+            >
+              <s-option value="top">Top of page</s-option>
+              <s-option value="bottom">Bottom of page</s-option>
+            </s-select>
+          ) : null}
+          <s-select
+            label="Goal"
+            value={behavior.goal}
+            onChange={(event) => {
+              const goal = valueOf(event);
+              const nextGoal = goal === "email" || goal === "discount" ? goal : "none";
+              onBehavior(
+                {
+                  ...behavior,
+                  goal: nextGoal,
+                  discount:
+                    nextGoal === "discount"
+                      ? behavior.discount ?? {
+                          mode: "shared",
+                          percentage: 10,
+                          code: null,
+                          shopifyDiscountId: null,
+                        }
+                      : null,
+                },
+                "goal",
+              );
+            }}
+          >
+            <s-option value="none">Announcement</s-option>
+            <s-option value="email">Email capture</s-option>
+            <s-option value="discount">Discount</s-option>
+          </s-select>
+          <s-select
+            label="Trigger"
+            value={behavior.trigger.type}
+            onChange={(event) => {
+              const type = valueOf(event);
+              const trigger =
+                type === "delay"
+                  ? { type: "delay" as const, seconds: 5 }
+                  : type === "scroll"
+                    ? { type: "scroll" as const, percent: 40 }
+                    : type === "exit"
+                      ? { type: "exit" as const }
+                      : { type: "immediate" as const };
+              onBehavior({ ...behavior, trigger }, "trigger");
+            }}
+          >
+            <s-option value="immediate">Immediately</s-option>
+            <s-option value="delay">After a delay</s-option>
+            <s-option value="scroll">After scroll</s-option>
+            <s-option value="exit">Exit intent</s-option>
+          </s-select>
+          {behavior.trigger.type === "delay" ? (
+            <NumberInput
+              label="Delay"
+              value={behavior.trigger.seconds}
+              min={0}
+              max={600}
+              suffix="seconds"
+              onValue={(seconds) => onBehavior({ ...behavior, trigger: { type: "delay", seconds } }, "delay")}
+            />
+          ) : null}
+          {behavior.trigger.type === "scroll" ? (
+            <NumberInput
+              label="Scroll depth"
+              value={behavior.trigger.percent}
+              min={0}
+              max={100}
+              suffix="%"
+              onValue={(percent) => onBehavior({ ...behavior, trigger: { type: "scroll", percent } }, "scroll")}
+            />
+          ) : null}
+          <s-select
+            label="Frequency"
+            value={behavior.frequency.type}
+            onChange={(event) => {
+              const type = valueOf(event);
+              const frequency =
+                type === "once"
+                  ? { type: "once" as const }
+                  : type === "days"
+                    ? { type: "days" as const, days: 7 }
+                    : { type: "always" as const };
+              onBehavior({ ...behavior, frequency }, "frequency");
+            }}
+          >
+            <s-option value="always">Every visit</s-option>
+            <s-option value="once">Once</s-option>
+            <s-option value="days">Every few days</s-option>
+          </s-select>
+          {behavior.frequency.type === "days" ? (
+            <NumberInput
+              label="Days between views"
+              value={behavior.frequency.days}
+              min={1}
+              max={365}
+              suffix="days"
+              onValue={(days) => onBehavior({ ...behavior, frequency: { type: "days", days } }, "days")}
+            />
+          ) : null}
+          <NumberInput
+            label="Priority"
+            value={behavior.priority}
+            min={0}
+            max={100}
+            details="Higher numbers show first when more than one popup matches."
+            onValue={(priority) => onBehavior({ ...behavior, priority }, "priority")}
+          />
           <s-text-field
-            label="Percent off"
-            value={String(behavior.discount.percentage)}
+            label="Include paths"
+            value={behavior.targeting.include.join(", ")}
+            details="Comma-separated. Leave blank for every page."
             onInput={(event) =>
               onBehavior(
                 {
                   ...behavior,
-                  discount: {
-                    ...behavior.discount!,
-                    percentage: numberValue(valueOf(event), 10),
-                  },
+                  targeting: { ...behavior.targeting, include: splitList(valueOf(event)) },
                 },
-                "discount-percent",
+                "include",
               )
             }
           />
-          {behavior.discount.mode === "shared" ? (
-            <s-text-field
-              label="Code"
-              value={behavior.discount.code ?? ""}
-              details="Leave blank to generate a code when you publish."
-              onInput={(event) =>
-                onBehavior(
-                  {
-                    ...behavior,
-                    discount: {
-                      ...behavior.discount!,
-                      code: valueOf(event).trim() || null,
-                    },
-                  },
-                  "discount-code",
-                )
-              }
-            />
-          ) : null}
-        </s-stack>
-      ) : null}
-
-      <s-divider />
-      <s-heading>Colors and type</s-heading>
-      <s-text-field
-        label="Background"
-        value={document.tokens.background}
-        onInput={(event) =>
-          onCommand({ type: "updateTokens", tokens: { background: valueOf(event) } }, "token-background")
-        }
-      />
-      <s-text-field
-        label="Text"
-        value={document.tokens.text}
-        onInput={(event) =>
-          onCommand({ type: "updateTokens", tokens: { text: valueOf(event) } }, "token-text")
-        }
-      />
-      <s-text-field
-        label="Accent"
-        value={document.tokens.accent}
-        onInput={(event) =>
-          onCommand({ type: "updateTokens", tokens: { accent: valueOf(event) } }, "token-accent")
-        }
-      />
-      <s-text-field
-        label="Overlay"
-        value={document.tokens.overlay}
-        onInput={(event) =>
-          onCommand({ type: "updateTokens", tokens: { overlay: valueOf(event) } }, "token-overlay")
-        }
-      />
-      <s-text-field
-        label="Width"
-        value={String(document.tokens.width)}
-        onInput={(event) =>
-          onCommand(
-            { type: "updateTokens", tokens: { width: numberValue(valueOf(event), 440) } },
-            "token-width",
-          )
-        }
-      />
-      <s-text-field
-        label="Corner radius"
-        value={String(document.tokens.radius)}
-        onInput={(event) =>
-          onCommand(
-            { type: "updateTokens", tokens: { radius: numberValue(valueOf(event), 16) } },
-            "token-radius",
-          )
-        }
-      />
-      <s-text-field
-        label="Font"
-        value={document.tokens.font}
-        onInput={(event) =>
-          onCommand({ type: "updateTokens", tokens: { font: valueOf(event) } }, "token-font")
-        }
-      />
-
-      {selected ? (
-        <s-stack direction="block" gap="base">
-          <s-divider />
-          <s-heading>{selected.name}</s-heading>
-          <s-text>{NODE_LABELS[selected.type]}</s-text>
-          <NodeFields
-            nodeId={selected.id}
-            type={selected.type}
-            nodeProps={selected.props}
-            style={selected.style}
-            onCommand={onCommand}
+          <s-text-field
+            label="Exclude paths"
+            value={behavior.targeting.exclude.join(", ")}
+            onInput={(event) =>
+              onBehavior(
+                {
+                  ...behavior,
+                  targeting: { ...behavior.targeting, exclude: splitList(valueOf(event)) },
+                },
+                "exclude",
+              )
+            }
           />
-          {addTypes.length > 0 ? (
-            <AddBlock
-              types={addTypes}
-              onAdd={(nodeType) =>
-                onCommand({
-                  type: "insert",
-                  parentId: selected.id,
-                  index: selected.childIds.length,
-                  nodeType,
-                })
+          {behavior.goal === "discount" && behavior.discount ? (
+            <>
+              <s-select
+                label="Discount codes"
+                value={behavior.discount.mode}
+                onChange={(event) =>
+                  onBehavior(
+                    {
+                      ...behavior,
+                      discount: {
+                        ...behavior.discount!,
+                        mode: valueOf(event) === "unique" ? "unique" : "shared",
+                      },
+                    },
+                    "discount-mode",
+                  )
+                }
+              >
+                <s-option value="shared">One public code</s-option>
+                <s-option value="unique">Unique code per customer</s-option>
+              </s-select>
+              <NumberInput
+                label="Percent off"
+                value={behavior.discount.percentage}
+                min={1}
+                max={100}
+                suffix="%"
+                onValue={(percentage) =>
+                  onBehavior({ ...behavior, discount: { ...behavior.discount!, percentage } }, "discount-percent")
+                }
+              />
+              {behavior.discount.mode === "shared" ? (
+                <s-text-field
+                  label="Code"
+                  value={behavior.discount.code ?? ""}
+                  details="Leave blank to generate a code when you publish."
+                  onInput={(event) =>
+                    onBehavior(
+                      {
+                        ...behavior,
+                        discount: {
+                          ...behavior.discount!,
+                          code: valueOf(event).trim() || null,
+                        },
+                      },
+                      "discount-code",
+                    )
+                  }
+                />
+              ) : null}
+            </>
+          ) : null}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Design">
+        <s-stack direction="block" gap="base">
+          <s-color-field
+            label="Background"
+            value={document.tokens.background}
+            onInput={(event) =>
+              onCommand({ type: "updateTokens", tokens: { background: valueOf(event) } }, "token-background")
+            }
+          />
+          <s-color-field
+            label="Text"
+            value={document.tokens.text}
+            onInput={(event) =>
+              onCommand({ type: "updateTokens", tokens: { text: valueOf(event) } }, "token-text")
+            }
+          />
+          <s-color-field
+            label="Accent"
+            value={document.tokens.accent}
+            onInput={(event) =>
+              onCommand({ type: "updateTokens", tokens: { accent: valueOf(event) } }, "token-accent")
+            }
+          />
+          {behavior.presentation === "modal" ? (
+            <s-color-field
+              label="Overlay"
+              alpha
+              value={document.tokens.overlay}
+              onInput={(event) =>
+                onCommand({ type: "updateTokens", tokens: { overlay: valueOf(event) } }, "token-overlay")
               }
             />
           ) : null}
-          {parent && selected.id !== document.rootId ? (
-            <s-stack direction="inline" gap="base">
-              <s-button
-                onClick={() =>
-                  onCommand({
-                    type: "move",
-                    nodeId: selected.id,
-                    parentId: parent.id,
-                    index: siblingIndex - 1,
-                  })
-                }
-              >
-                Move up
-              </s-button>
-              <s-button
-                onClick={() =>
-                  onCommand({
-                    type: "move",
-                    nodeId: selected.id,
-                    parentId: parent.id,
-                    index: siblingIndex + 1,
-                  })
-                }
-              >
-                Move down
-              </s-button>
-              <s-button onClick={() => onCommand({ type: "duplicate", nodeId: selected.id })}>
-                Duplicate
-              </s-button>
-              <s-button tone="critical" onClick={() => onCommand({ type: "delete", nodeId: selected.id })}>
-                Delete
-              </s-button>
-            </s-stack>
+          {behavior.presentation === "modal" ? (
+            <NumberInput
+              label="Width"
+              value={document.tokens.width}
+              min={240}
+              max={960}
+              step={10}
+              suffix="px"
+              onValue={(width) => onCommand({ type: "updateTokens", tokens: { width } }, "token-width")}
+            />
           ) : null}
+          <NumberInput
+            label="Corner radius"
+            value={document.tokens.radius}
+            min={0}
+            max={48}
+            suffix="px"
+            onValue={(radius) => onCommand({ type: "updateTokens", tokens: { radius } }, "token-radius")}
+          />
+          <s-text-field
+            label="Font"
+            value={document.tokens.font}
+            onInput={(event) =>
+              onCommand({ type: "updateTokens", tokens: { font: valueOf(event) } }, "token-font")
+            }
+          />
         </s-stack>
-      ) : (
-        <s-paragraph>Select a block in the preview to edit it.</s-paragraph>
-      )}
+      </s-section>
     </s-stack>
   );
 }
@@ -384,19 +440,19 @@ function splitList(value: string): string[] {
 }
 
 function AddBlock({ types, onAdd }: { types: NodeType[]; onAdd: (type: NodeType) => void }) {
-  const [nodeType, setNodeType] = useState<NodeType>(types[0]);
-  const selected = types.includes(nodeType) ? nodeType : types[0];
   return (
-    <s-stack direction="inline" gap="base">
-      <s-select label="Add block" value={selected} onChange={(event) => setNodeType(valueOf(event) as NodeType)}>
+    <>
+      <s-button icon="plus" commandFor="add-block-menu">
+        Add block
+      </s-button>
+      <s-menu id="add-block-menu" accessibilityLabel="Block types">
         {types.map((type) => (
-          <s-option key={type} value={type}>
+          <s-button key={type} onClick={() => onAdd(type)}>
             {NODE_LABELS[type]}
-          </s-option>
+          </s-button>
         ))}
-      </s-select>
-      <s-button onClick={() => onAdd(selected)}>Add</s-button>
-    </s-stack>
+      </s-menu>
+    </>
   );
 }
 
@@ -478,7 +534,7 @@ function NodeFields({
     return (
       <s-text-field
         label="Consent label"
-        details="Shown as a checkbox. Leave blank to skip consent."
+        details="Shown as an optional checkbox. Leave blank to skip consent."
         value={String(nodeProps.consentLabel ?? "")}
         onInput={(event) => setProp("consentLabel", valueOf(event))}
       />
@@ -502,20 +558,26 @@ function NodeFields({
 
   if (type === "spacer") {
     return (
-      <s-text-field
+      <NumberInput
         label="Height"
-        value={String(style.size ?? 16)}
-        onInput={(event) => setStyle("size", numberValue(valueOf(event), 16))}
+        value={Number(style.size ?? 16)}
+        min={0}
+        max={200}
+        suffix="px"
+        onValue={(size) => setStyle("size", size)}
       />
     );
   }
 
   if (type === "columns") {
     return (
-      <s-text-field
+      <NumberInput
         label="Gap"
-        value={String(style.gap ?? 12)}
-        onInput={(event) => setStyle("gap", numberValue(valueOf(event), 12))}
+        value={Number(style.gap ?? 12)}
+        min={0}
+        max={96}
+        suffix="px"
+        onValue={(gap) => setStyle("gap", gap)}
       />
     );
   }
@@ -531,16 +593,24 @@ function NodeFields({
           <s-option value="column">Vertical</s-option>
           <s-option value="row">Horizontal</s-option>
         </s-select>
-        <s-text-field
-          label="Gap"
-          value={String(style.gap ?? 12)}
-          onInput={(event) => setStyle("gap", numberValue(valueOf(event), 12))}
-        />
-        <s-text-field
-          label="Padding"
-          value={String(style.padding ?? 0)}
-          onInput={(event) => setStyle("padding", numberValue(valueOf(event), 0))}
-        />
+        <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+          <NumberInput
+            label="Gap"
+            value={Number(style.gap ?? 12)}
+            min={0}
+            max={96}
+            suffix="px"
+            onValue={(gap) => setStyle("gap", gap)}
+          />
+          <NumberInput
+            label="Padding"
+            value={Number(style.padding ?? 0)}
+            min={0}
+            max={96}
+            suffix="px"
+            onValue={(padding) => setStyle("padding", padding)}
+          />
+        </s-grid>
       </s-stack>
     );
   }

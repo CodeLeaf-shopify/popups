@@ -64,7 +64,7 @@ export default function PopupsIndex() {
   const embedUrl = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${apiKey}/${EMBED_HANDLE}`;
 
   return (
-    <s-page heading="Popups">
+    <s-page heading="Popups" inlineSize="large">
       <s-stack direction="block" gap="base">
         {publicationError ? (
           <s-banner tone="warning" heading="Storefront sync needs attention">
@@ -111,17 +111,12 @@ export default function PopupsIndex() {
   );
 }
 
-function toneFor(status: string): "success" | "warning" | "info" {
-  if (status === "published") return "success";
-  if (status === "paused") return "warning";
-  return "info";
+function toneFor(status: string): "success" | "info" {
+  return status === "published" ? "success" : "info";
 }
 
 function labelFor(status: string): string {
-  if (status === "published" || status === "paused" || status === "draft") {
-    return status.charAt(0).toUpperCase() + status.slice(1);
-  }
-  return status;
+  return status === "published" ? "Published" : "Draft";
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

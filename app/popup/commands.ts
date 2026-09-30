@@ -13,6 +13,7 @@ import {
 export type CommandResult = {
   document: EditorDocument;
   error?: string;
+  insertedId?: string;
 };
 
 function nodeId(): string {
@@ -154,7 +155,7 @@ function insertNode(
   const childIds = nodes[parentId].childIds.slice();
   childIds.splice(clampIndex(index, childIds.length), 0, node.id);
   nodes[parentId] = { ...nodes[parentId], childIds };
-  return { document: { ...document, nodes } };
+  return { document: { ...document, nodes }, insertedId: node.id };
 }
 
 function moveNode(
@@ -251,7 +252,7 @@ function duplicateNode(document: EditorDocument, sourceId: string): CommandResul
   const childIds = parent.childIds.slice();
   childIds.splice(index + 1, 0, copyId);
   nodes[parent.id] = { ...parent, childIds };
-  return { document: { ...document, nodes } };
+  return { document: { ...document, nodes }, insertedId: copyId };
 }
 
 export function applyCommand(

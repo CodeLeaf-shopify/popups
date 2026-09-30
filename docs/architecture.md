@@ -106,7 +106,7 @@ Publishing an active popup:
 3. uploads the payload to Shopify Files;
 4. rebuilds `leaf_popups.manifest` with active campaigns.
 
-Pausing or unpublishing rebuilds the manifest without the campaign. Old
+Unpublishing rebuilds the manifest without the campaign. Old
 content-addressed files can remain because storefronts no longer reference
 them.
 
