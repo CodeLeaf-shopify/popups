@@ -4,12 +4,14 @@ import type { Popup } from "@prisma/client";
 
 import prisma from "../db.server";
 import { compile } from "./compile";
+import { assertCanPublish } from "./entitlements.server";
 import { createSharedDiscount, discountCode } from "./discounts.server";
 import { uploadPopupPayload } from "./files.server";
 import { ensureMetafieldDefinitions, writeShopManifest } from "./metafields.server";
 import { parseBehavior, parseEditorDocument, parsePayload } from "./parse";
 import { getShopSettings, manifestSettings } from "./settings.server";
 import type { AdminClient } from "./admin-graphql.server";
+import { scheduleOrderError } from "./plans";
 import {
   resolveTokens,
   type Behavior,
@@ -114,6 +116,10 @@ export async function publishPopup(
 > {
   const existing = await prisma.popup.findFirst({ where: { id: popupId, shop } });
   if (!existing) return { ok: false, error: "Popup not found." };
+  const scheduleError = scheduleOrderError(behavior.schedule);
+  if (scheduleError) return { ok: false, error: scheduleError };
+  const blocked = await assertCanPublish(admin, shop, popupId, behavior);
+  if (blocked) return { ok: false, error: blocked };
   const { tokens: globalTokens } = await getShopSettings(shop);
   const preview = compile(document, behavior, globalTokens);
   if (!preview.ok) return preview;

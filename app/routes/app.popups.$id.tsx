@@ -8,6 +8,7 @@ import { parseBehavior, parseEditorDocument, parsePayload } from "../popup/parse
 import { previewLink } from "../popup/preview-token.server";
 import { publishPopup, setPopupStatus } from "../popup/publish.server";
 import { readRendererSource } from "../popup/renderer-source.server";
+import { getShopPlan } from "../popup/billing.server";
 import { getShopSettings } from "../popup/settings.server";
 import {
   syncDiscount,
@@ -54,17 +55,18 @@ function keepDiscountId(incoming: Behavior, stored: string): Behavior {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const popup = await prisma.popup.findFirst({ where: { id: params.id, shop: session.shop } });
   if (!popup) throw new Response("Popup not found", { status: 404 });
   const document = parseEditorDocument(JSON.parse(popup.draftDocument));
   const behavior = syncDiscount(document, parseBehavior(JSON.parse(popup.draftBehavior)));
   const status = popupStatus(popup.status);
-  const settings = await getShopSettings(session.shop);
+  const [settings, plan] = await Promise.all([getShopSettings(session.shop), getShopPlan(admin, session.shop)]);
   return {
     rendererSource: readRendererSource(),
     globalTokens: settings.tokens,
     hiddenForLoggedInGlobally: settings.hideForLoggedIn,
+    pro: plan.plan === "pro",
     document,
     behavior,
     updatedAt: popup.updatedAt.toISOString(),
@@ -169,6 +171,7 @@ export default function PopupRoute() {
     preview,
     globalTokens,
     hiddenForLoggedInGlobally,
+    pro,
   } = useLoaderData<typeof loader>();
   return (
     <PopupEditor
@@ -182,6 +185,7 @@ export default function PopupRoute() {
       preview={preview}
       globalTokens={globalTokens}
       hiddenForLoggedInGlobally={hiddenForLoggedInGlobally}
+      pro={pro}
     />
   );
 }

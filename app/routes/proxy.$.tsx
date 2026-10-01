@@ -3,6 +3,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
 import { compile } from "../popup/compile";
 import { recordPopupEvent, submitPopup } from "../popup/customers.server";
+import { recordPopupStat, type StatEvent } from "../popup/stats.server";
 import { parseManifest } from "../popup/parse";
 import { draftsFromRow } from "../popup/publish.server";
 import { verifyPreviewToken } from "../popup/preview-token.server";
@@ -74,7 +75,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     if (path.endsWith("/event")) {
-      const event = body.event === "dismissed" ? "dismissed" : "shown";
+      const event = body.event === "dismissed" ? "dismissed" : body.event === "clicked" ? "clicked" : "shown";
+      const stat: StatEvent = event === "dismissed" ? "dismissals" : event === "clicked" ? "clicks" : "views";
+      try {
+        await recordPopupStat(context.session.shop, body.popupId, stat);
+      } catch (error) {
+        console.error("Unable to record a popup stat", error);
+      }
+      if (event === "clicked") return json({ ok: true });
       const result = await recordPopupEvent(
         context.admin,
         context.session.shop,

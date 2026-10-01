@@ -36,6 +36,7 @@ type PopupEditorProps = {
   preview: PreviewLink;
   globalTokens: Tokens;
   hiddenForLoggedInGlobally: boolean;
+  pro: boolean;
 };
 
 const DEVICE_WIDTHS: Record<EditorDevice, number | string> = {
@@ -60,6 +61,7 @@ export function PopupEditor({
   preview: initialPreview,
   globalTokens,
   hiddenForLoggedInGlobally,
+  pro,
 }: PopupEditorProps) {
   const [editor, dispatch] = useReducer(
     editorReducer,
@@ -420,6 +422,7 @@ export function PopupEditor({
             >
               <PopupSettingsPanel
                 behavior={editor.behavior}
+                pro={pro}
                 hiddenForLoggedInGlobally={hiddenForLoggedInGlobally}
                 onBehavior={(behavior, coalesceKey) => dispatch({ type: "behavior", behavior, coalesceKey })}
               />

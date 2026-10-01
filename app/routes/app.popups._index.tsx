@@ -3,14 +3,17 @@ import { redirect, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import prisma from "../db.server";
+import { getShopPlan } from "../popup/billing.server";
 import { parseBehavior } from "../popup/parse";
+import { FREE_PUBLISHED_LIMIT } from "../popup/plans";
 import { createFromTemplate, isTemplateId, TEMPLATES, type TemplateId } from "../popup/presets";
 import { setPopupStatus } from "../popup/publish.server";
 import { EMBED_HANDLE, type PopupStatus } from "../popup/types";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const plan = await getShopPlan(admin, session.shop);
   const [popups, publication] = await Promise.all([
     prisma.popup.findMany({
       where: { shop: session.shop },
@@ -23,6 +26,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     shop: session.shop,
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    plan: plan.plan,
+    unpublished: plan.unpublished,
     popups: popups.map((popup) => ({
       id: popup.id,
       name: popup.name,
@@ -68,10 +73,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function PopupsIndex() {
-  const { shop, apiKey, popups, publicationError } = useLoaderData<typeof loader>();
+  const { shop, apiKey, popups, publicationError, plan, unpublished } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const embedUrl = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${apiKey}/${EMBED_HANDLE}`;
   const activePopups = popups.filter((popup) => popup.status !== "archived");
+  const publishedCount = popups.filter((popup) => popup.status === "published").length;
   const archivedPopups = popups.filter((popup) => popup.status === "archived");
   const actionError = fetcher.data && "error" in fetcher.data ? fetcher.data.error : null;
   const busy = fetcher.state !== "idle";
@@ -144,6 +150,12 @@ export default function PopupsIndex() {
       </s-menu>
       <s-stack direction="block" gap="base">
         {actionError ? <s-banner tone="critical">{actionError}</s-banner> : null}
+        {unpublished.length ? (
+          <s-banner tone="warning" heading="Some popups were unpublished">
+            The Free plan keeps {FREE_PUBLISHED_LIMIT} published popups and leaves out Pro features. Unpublished:{" "}
+            {unpublished.join(", ")}. <s-link href="/app/plans">View plans</s-link>
+          </s-banner>
+        ) : null}
         {publicationError ? (
           <s-banner tone="warning" heading="Storefront sync needs attention">
             {publicationError}
@@ -158,6 +170,14 @@ export default function PopupsIndex() {
           </s-link>
         </s-section>
         <s-section heading="Active popups">
+          {plan === "free" ? (
+            <s-paragraph>
+              Free plan: {publishedCount} of {FREE_PUBLISHED_LIMIT} popups published.{" "}
+              <s-link href="/app/plans">Upgrade to Pro</s-link> for unlimited popups.
+            </s-paragraph>
+          ) : (
+            <s-paragraph>Pro plan. Unlimited published popups.</s-paragraph>
+          )}
           {activePopups.length === 0 ? (
             <s-paragraph>No active popups yet. Create one or start from a template to open the builder.</s-paragraph>
           ) : (

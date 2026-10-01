@@ -112,16 +112,18 @@
   }
 
   function remember(id, eventName) {
-    var state = readLocal();
-    var now = new Date().toISOString();
-    var patch = eventName === "dismissed" ? { dismissedAt: now } : { lastShown: now };
-    state.popups[id] = Object.assign({}, state.popups[id], patch);
-    writeLocal(state);
-    if (!boot.loggedIn) return;
+    if (eventName === "shown" || eventName === "dismissed") {
+      var state = readLocal();
+      var now = new Date().toISOString();
+      var patch = eventName === "dismissed" ? { dismissedAt: now } : { lastShown: now };
+      state.popups[id] = Object.assign({}, state.popups[id], patch);
+      writeLocal(state);
+    }
     fetch(boot.proxy + "/event", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ popupId: id, event: eventName }),
+      keepalive: true,
     }).catch(function () {});
   }
 
@@ -134,6 +136,9 @@
         api.destroy();
         element.remove();
         if (onClosed) onClosed();
+      },
+      onClick: function () {
+        if (campaign) remember(campaign.id, "clicked");
       },
       onSubmit: function (detail) {
         return fetch(boot.proxy + "/submit", {

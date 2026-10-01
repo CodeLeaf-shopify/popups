@@ -1,10 +1,19 @@
 import {
+  orderedDevices,
+  scheduleDate,
+  scheduleInstant,
+  scheduleOrderError,
+  targetsAllDevices,
+  usesProFeatures,
+} from "../popup/plans";
+import {
   canContain,
   NODE_LABELS,
   NODE_TYPES,
   resolveTokens,
   type Behavior,
   type Command,
+  type Device,
   type EditorDocument,
   type NodeType,
   type Tokens,
@@ -13,6 +22,7 @@ import { LayersPanel } from "./LayersPanel";
 
 type PopupSettingsPanelProps = {
   behavior: Behavior;
+  pro: boolean;
   hiddenForLoggedInGlobally: boolean;
   onBehavior: (behavior: Behavior, coalesceKey?: string) => void;
 };
@@ -230,7 +240,38 @@ export function StructurePanel({
   );
 }
 
-export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBehavior }: PopupSettingsPanelProps) {
+export function PopupSettingsPanel({ behavior, pro, hiddenForLoggedInGlobally, onBehavior }: PopupSettingsPanelProps) {
+  const locked = !pro;
+  const scheduleError = scheduleOrderError(behavior.schedule);
+  const setTrigger = (event: Event) => {
+    const type = valueOf(event);
+    if (type === "exit" && locked) return;
+    const trigger =
+      type === "delay"
+        ? { type: "delay" as const, seconds: 5 }
+        : type === "scroll"
+          ? { type: "scroll" as const, percent: 40 }
+          : type === "exit"
+            ? { type: "exit" as const }
+            : { type: "immediate" as const };
+    onBehavior({ ...behavior, trigger }, "trigger");
+  };
+  const setSchedule = (bound: "start" | "end", date: string) => {
+    if (locked) return;
+    const instant = date ? scheduleInstant(date, bound) : null;
+    if (date && !instant) return;
+    onBehavior({ ...behavior, schedule: { ...behavior.schedule, [bound]: instant } }, "schedule");
+  };
+  const toggleDevice = (device: Device, checked: boolean) => {
+    if (locked) return;
+    const selected = new Set(behavior.targeting.devices);
+    if (checked) selected.add(device);
+    else selected.delete(device);
+    const devices = orderedDevices(selected);
+    if (!devices.length) return;
+    onBehavior({ ...behavior, targeting: { ...behavior.targeting, devices } }, "devices");
+  };
+
   return (
     <s-section heading="Popup settings">
         <s-stack direction="block" gap="base">
@@ -262,26 +303,24 @@ export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBeha
               <s-option value="bottom">Bottom of page</s-option>
             </s-select>
           ) : null}
-          <s-select
-            label="Trigger"
-            value={behavior.trigger.type}
-            onChange={(event) => {
-              const type = valueOf(event);
-              const trigger =
-                type === "delay"
-                  ? { type: "delay" as const, seconds: 5 }
-                  : type === "scroll"
-                    ? { type: "scroll" as const, percent: 40 }
-                    : type === "exit"
-                      ? { type: "exit" as const }
-                      : { type: "immediate" as const };
-              onBehavior({ ...behavior, trigger }, "trigger");
-            }}
-          >
+          {locked ? (
+            <s-paragraph>
+              Exit intent, scheduling, one-device targeting, and unique codes publish on the Pro plan.{" "}
+              <s-link href="/app/plans">View plans</s-link>
+            </s-paragraph>
+          ) : null}
+          {locked && usesProFeatures(behavior) ? (
+            <s-banner tone="warning" heading="Pro settings">
+              Publishing keeps these settings on the Pro plan. Switch them back to publish on Free.
+            </s-banner>
+          ) : null}
+          <s-select label="Trigger" value={behavior.trigger.type} onChange={setTrigger}>
             <s-option value="immediate">Immediately</s-option>
             <s-option value="delay">After a delay</s-option>
             <s-option value="scroll">After scroll</s-option>
-            <s-option value="exit">Exit intent</s-option>
+            <s-option value="exit" {...(locked && behavior.trigger.type !== "exit" ? { disabled: true } : {})}>
+              Exit intent
+            </s-option>
           </s-select>
           {behavior.trigger.type === "delay" ? (
             <NumberInput
@@ -331,6 +370,29 @@ export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBeha
               onValue={(days) => onBehavior({ ...behavior, frequency: { type: "days", days } }, "days")}
             />
           ) : null}
+          <s-date-field
+            label="Schedule start"
+            value={scheduleDate(behavior.schedule.start)}
+            details="First day the popup can show. Leave blank for no start."
+            {...(locked ? { disabled: true } : {})}
+            onChange={(event) => setSchedule("start", valueOf(event))}
+          />
+          <s-date-field
+            label="Schedule end"
+            value={scheduleDate(behavior.schedule.end)}
+            details="Last day the popup can show. Leave blank for no end."
+            {...(locked ? { disabled: true } : {})}
+            onChange={(event) => setSchedule("end", valueOf(event))}
+          />
+          {scheduleError ? <s-paragraph>{scheduleError}</s-paragraph> : null}
+          {locked && (behavior.schedule.start || behavior.schedule.end) ? (
+            <s-button
+              variant="tertiary"
+              onClick={() => onBehavior({ ...behavior, schedule: { start: null, end: null } }, "schedule")}
+            >
+              Clear schedule
+            </s-button>
+          ) : null}
           <NumberInput
             label="Priority"
             value={behavior.priority}
@@ -367,6 +429,31 @@ export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBeha
             }
           />
           <s-checkbox
+            label="Desktop"
+            {...(behavior.targeting.devices.includes("desktop") ? { checked: true } : {})}
+            {...(locked ? { disabled: true } : {})}
+            onChange={(event) => toggleDevice("desktop", (event.currentTarget as { checked?: boolean }).checked === true)}
+          />
+          <s-checkbox
+            label="Mobile"
+            {...(behavior.targeting.devices.includes("mobile") ? { checked: true } : {})}
+            {...(locked ? { disabled: true } : {})}
+            onChange={(event) => toggleDevice("mobile", (event.currentTarget as { checked?: boolean }).checked === true)}
+          />
+          {locked && !targetsAllDevices(behavior.targeting.devices) ? (
+            <s-button
+              variant="tertiary"
+              onClick={() =>
+                onBehavior(
+                  { ...behavior, targeting: { ...behavior.targeting, devices: ["desktop", "mobile"] } },
+                  "devices",
+                )
+              }
+            >
+              Show on desktop and mobile
+            </s-button>
+          ) : null}
+          <s-checkbox
             label="Hide from logged-in customers"
             {...(hiddenForLoggedInGlobally || behavior.targeting.hideForLoggedIn ? { checked: true } : {})}
             {...(hiddenForLoggedInGlobally
@@ -388,21 +475,28 @@ export function PopupSettingsPanel({ behavior, hiddenForLoggedInGlobally, onBeha
               <s-select
                 label="Discount codes"
                 value={behavior.discount.mode}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const mode = valueOf(event) === "unique" ? "unique" : "shared";
+                  if (mode === "unique" && locked) return;
                   onBehavior(
                     {
                       ...behavior,
                       discount: {
                         ...behavior.discount!,
-                        mode: valueOf(event) === "unique" ? "unique" : "shared",
+                        mode,
                       },
                     },
                     "discount-mode",
-                  )
-                }
+                  );
+                }}
               >
                 <s-option value="shared">One public code</s-option>
-                <s-option value="unique">Unique code per customer</s-option>
+                <s-option
+                  value="unique"
+                  {...(locked && behavior.discount.mode !== "unique" ? { disabled: true } : {})}
+                >
+                  Unique code per customer
+                </s-option>
               </s-select>
               <NumberInput
                 label="Percent off"

@@ -42,10 +42,24 @@ export function parseBehavior(raw: unknown): Behavior {
   }
   const behavior = { ...raw } as unknown as Behavior & { goal?: unknown };
   delete behavior.goal;
+  const devices = Array.isArray(behavior.targeting.devices)
+    ? behavior.targeting.devices.filter((device) => device === "desktop" || device === "mobile")
+    : (["desktop", "mobile"] as const);
   return {
     ...behavior,
     barPosition: behavior.barPosition === "bottom" ? "bottom" : "top",
-    targeting: { ...behavior.targeting, hideForLoggedIn: behavior.targeting.hideForLoggedIn === true },
+    schedule: {
+      start: behavior.schedule?.start || null,
+      end: behavior.schedule?.end || null,
+    },
+    targeting: {
+      ...behavior.targeting,
+      devices: [...devices],
+      include: behavior.targeting.include ?? [],
+      exclude: behavior.targeting.exclude ?? [],
+      templates: behavior.targeting.templates ?? [],
+      hideForLoggedIn: behavior.targeting.hideForLoggedIn === true,
+    },
   };
 }
 

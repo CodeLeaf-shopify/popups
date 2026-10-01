@@ -268,7 +268,10 @@
         var href = safeUrl(String(props.href || ""));
         if (href && settings.mode === "interact") {
           button.type = "button";
-          button.addEventListener("click", function () { window.location.href = href; });
+          button.addEventListener("click", function () {
+            if (settings.onClick) settings.onClick();
+            window.location.href = href;
+          });
         }
         content.appendChild(button);
         return;
@@ -322,6 +325,7 @@
           reveal.style.marginTop = "8px";
           reveal.addEventListener("click", function () {
             reveal.disabled = true;
+            if (settings.onClick) settings.onClick();
             claimCode();
           });
           content.appendChild(reveal);

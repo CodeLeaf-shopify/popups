@@ -3,6 +3,7 @@ import { adminGraphql, formatUserErrors, type AdminClient } from "./admin-graphq
 import { createSharedDiscount, discountCode } from "./discounts.server";
 import { readCustomerState, writeCustomerState } from "./metafields.server";
 import { parseBehavior } from "./parse";
+import { recordPopupStat } from "./stats.server";
 import { emptyCustomerState, type CustomerState } from "./types";
 
 const FIND_CUSTOMER = `#graphql
@@ -141,6 +142,11 @@ export async function submitPopup(
     },
   );
   await writeCustomerState(admin, customerId, state);
+  try {
+    await recordPopupStat(shop, popup.id, "submits");
+  } catch (error) {
+    console.error("Unable to record a popup submit", error);
+  }
   return {
     ok: true,
     state,

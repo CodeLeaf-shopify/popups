@@ -70,3 +70,28 @@ model ShopSettings {
   hideForLoggedIn   Boolean  @default(false)
   updatedAt         DateTime @updatedAt
 }
+
+model ShopBilling {
+  shop             String   @id
+  plan             String   @default("free")
+  subscriptionId   String?
+  status           String?
+  test             Boolean  @default(false)
+  unpublishedNames String   @default("[]")
+  checkedAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PopupDailyStat {
+  id         String @id @default(cuid())
+  shop       String
+  popupId    String
+  day        String
+  views      Int    @default(0)
+  clicks     Int    @default(0)
+  submits    Int    @default(0)
+  dismissals Int    @default(0)
+
+  @@unique([shop, popupId, day])
+  @@index([shop, day])
+}
