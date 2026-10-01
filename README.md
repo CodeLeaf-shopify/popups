@@ -25,6 +25,7 @@ contracts shared by the builder, preview, and storefront renderer.
 
 - Node.js `>=20.19 <22` or `>=22.12`
 - npm
+- PostgreSQL 16 or Docker
 - A Shopify Partner account and development store
 - Shopify CLI
 
@@ -42,7 +43,8 @@ contracts shared by the builder, preview, and storefront renderer.
    npm run config:link
    ```
 
-3. Generate the Prisma client and apply migrations:
+3. Set `DATABASE_URL` to a PostgreSQL database, then generate the Prisma
+   client and apply migrations:
 
    ```shell
    npm run setup
@@ -68,6 +70,13 @@ Never commit real credentials.
 - `SHOPIFY_APP_URL` — public HTTPS origin for the web app
 - `SCOPES` — comma-separated scopes matching `shopify.app.toml`
 - `SHOP_CUSTOM_DOMAIN` — optional custom shop domain
+- `DATABASE_URL` — PostgreSQL connection string; use host `db` inside Compose
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` — credentials used to
+  initialize the Compose database
+- `POSTGRES_BIND_ADDRESS`, `POSTGRES_PORT` — host listener used by database
+  administration tools
+- `APP_DOMAIN` — hostname served by Caddy, without a URL scheme
+- `HOST`, `PORT` — production server bind address and port
 - `NODE_ENV` — set to `production` in production
 - `PRO_UNLOCKED` — testing only. Set to `true` to grant Pro features without a subscription. Unset, `false`, or any other value keeps Shopify App Pricing.
 
@@ -95,20 +104,83 @@ npm run deploy       # Deploy Shopify app configuration and extensions
 
 ## Deployment
 
-The included Dockerfile installs dependencies with `npm ci`, builds the app,
-runs Prisma migrations at container startup, and starts the React Router
-server. The host must provide the environment variables listed above and route
-traffic to the service's `PORT`.
+The production stack in `compose.yaml` runs three services:
 
-The current Prisma datasource is a local SQLite file. That is suitable for
-local development, but production data will be lost on hosts with ephemeral
-filesystems, including Render services without persistent storage. Before a
-production launch, use a persistent disk for a single instance or migrate the
-schema and migrations to a managed database. Do not scale the current SQLite
-deployment to multiple instances.
+- `app` builds and serves the React Router application after applying Prisma
+  migrations;
+- `db` runs PostgreSQL 16 with a named volume;
+- `caddy` obtains an origin certificate and proxies HTTPS traffic to the app.
 
-Deploying the web service does not deploy the theme extension or Shopify app
-configuration. Run `npm run deploy` separately when those change.
+### One-time DigitalOcean setup
+
+1. Install Docker Engine and the Docker Compose plugin on the droplet, then
+   clone this repository.
+2. Copy `.env.example` to `.env`. Set the Shopify credentials, production
+   domain, and a unique URL-safe database password of at least 32 characters.
+   Repeat that password in `DATABASE_URL`; its host must remain `db`.
+3. Create a proxied Cloudflare DNS `A` record from `APP_DOMAIN` to the droplet.
+   Set Cloudflare SSL/TLS mode to **Full (strict)**.
+4. Attach a DigitalOcean Cloud Firewall with these inbound rules:
+   - TCP 80 and 443 from all IPv4 and IPv6 addresses;
+   - TCP 22 from your administration IPs;
+   - TCP 5432 only from your laptop's static public IP.
+5. Replace the placeholder application and redirect URLs in
+   `shopify.app.toml` with the production origin, then run `npm run deploy`
+   from a trusted development machine. Shopify configuration and the theme
+   extension are not deployed by Docker.
+
+Docker-published ports can bypass uncomplicated host-firewall assumptions.
+The DigitalOcean Cloud Firewall rule for port 5432 is required; never allow
+that port from `0.0.0.0/0` or `::/0`.
+
+Start or update the complete stack:
+
+```shell
+docker compose up -d --build
+```
+
+Inspect its status and logs:
+
+```shell
+docker compose ps
+docker compose logs -f app caddy db
+```
+
+Prisma migrations are idempotently applied whenever the app container starts.
+The PostgreSQL and Caddy named volumes survive container replacement. Do not
+use `docker compose down --volumes` unless all stored data may be deleted.
+
+### Connect with TablePlus
+
+Use the droplet's public IP, port `5432`, and the values of `POSTGRES_DB`,
+`POSTGRES_USER`, and `POSTGRES_PASSWORD`. The connection succeeds only from
+the source IP allowlisted in the DigitalOcean Cloud Firewall. Update that rule
+if your public IP changes.
+
+This direct connection is IP-restricted and password-authenticated, but the
+stack does not configure PostgreSQL transport TLS. Use TablePlus's SSH tunnel
+mode through the droplet when connecting across an untrusted network or when
+encrypted database transport is required.
+
+### Backups
+
+Create a compressed logical backup:
+
+```shell
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > leaf-popups.dump
+```
+
+Copy backups off the droplet to durable object storage and regularly test
+restores. Droplet snapshots are useful additional protection, not a substitute
+for database backups.
+
+For a full restore, stop the app first and restore into the existing database:
+
+```shell
+docker compose stop app
+docker compose exec -T db sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < leaf-popups.dump
+docker compose start app
+```
 
 ## Repository map
 
@@ -125,7 +197,7 @@ configuration. Run `npm run deploy` separately when those change.
 ### Prisma tables do not exist
 
 Run `npm run setup`. In deployment environments, make sure the service can
-write to the configured database before starting the app.
+connect to `DATABASE_URL` before starting the app.
 
 ### Embedded navigation loses the session
 
@@ -145,6 +217,5 @@ Before App Store submission or production launch:
 
 - implement and register Shopify's mandatory privacy compliance webhooks;
 - obtain protected customer data approval for the leads workflow;
-- replace SQLite or provision durable single-instance storage;
 - add automated tests and CI;
 - replace the inherited favicon with a Leaf Popups asset.

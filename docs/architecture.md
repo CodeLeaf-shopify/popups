@@ -45,7 +45,7 @@ flowchart LR
 
 ### Prisma
 
-Prisma stores non-customer application data:
+Prisma stores non-customer application data in PostgreSQL:
 
 - Shopify sessions;
 - merchant-authored popup drafts and behavior;
@@ -148,8 +148,15 @@ short-lived token and never publish the draft.
 
 ## Operational constraints
 
-- The current SQLite datasource is for local or durable single-instance use.
-  Ephemeral hosts require persistent storage or a managed database migration.
+- The production Compose stack uses PostgreSQL 16 with a named volume. Prisma
+  migrations run before the application server starts.
+- PostgreSQL port 5432 is published for administration and must be restricted
+  to explicit source IPs by the DigitalOcean Cloud Firewall. The application
+  connects over the private Compose network.
+- Caddy terminates origin HTTPS and proxies to the private application port.
+  Cloudflare should use a proxied DNS record with Full (strict) SSL mode.
+- Database backups must be copied off the droplet; container volumes and
+  droplet snapshots are not sufficient as the only backup.
 - The app embed must be deployed and enabled in the merchant's theme.
 - The leads workflow requires protected customer data approval before App Store
   distribution.

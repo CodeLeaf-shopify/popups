@@ -4,15 +4,15 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { OutcomesChart, SubmitRateBars, TrafficChart } from "../components/AnalyticsCharts";
 import { getShopPlan } from "../popup/billing.server";
-import {
-  ANALYTICS_RANGES,
-  analyticsSnapshot,
-  parseAnalyticsRange,
-  type AnalyticsLeading,
-  type AnalyticsTestReadout,
-  type AnalyticsVariant,
+import { analyticsSnapshot, parseAnalyticsRange } from "../popup/stats.server";
+import type {
+  AnalyticsLeading,
+  AnalyticsTestReadout,
+  AnalyticsVariant,
 } from "../popup/stats.server";
 import { authenticate } from "../shopify.server";
+
+const ANALYTICS_RANGES = [7, 30, 90] as const;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);

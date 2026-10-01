@@ -1,3 +1,11 @@
+.git
+.github
+.cursor
+.shopify
 .cache
 build
 node_modules
+.env
+.env.*
+prisma/*.sqlite
+prisma/*.sqlite-journal
