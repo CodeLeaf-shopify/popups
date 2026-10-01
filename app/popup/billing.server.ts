@@ -5,7 +5,7 @@ import {
   partnerApiConfigured,
   planFromSubscription,
 } from "./partner-api.server";
-import { PLAN_STALE_MS, type ShopPlan } from "./plans";
+import { PLAN_STALE_MS, proUnlocked, type ShopPlan } from "./plans";
 
 const SHOP_ID_QUERY = `#graphql
   query LeafPopupsShopId {
@@ -85,6 +85,7 @@ export async function getShopPlan(
   shop: string,
   options?: { force?: boolean },
 ): Promise<PlanSnapshot> {
+  if (proUnlocked()) return { plan: "pro", unpublished: [] };
   const cached = await prisma.shopBilling.findUnique({ where: { shop } });
   const fresh = cached != null && Date.now() - cached.checkedAt.getTime() < PLAN_STALE_MS;
   let current: PlanSnapshot;

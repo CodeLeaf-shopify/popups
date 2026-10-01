@@ -69,6 +69,7 @@ Never commit real credentials.
 - `SCOPES` — comma-separated scopes matching `shopify.app.toml`
 - `SHOP_CUSTOM_DOMAIN` — optional custom shop domain
 - `NODE_ENV` — set to `production` in production
+- `PRO_UNLOCKED` — testing only. Set to `true` to grant Pro features without a subscription. Unset, `false`, or any other value keeps Shopify App Pricing.
 
 ## Merchant workflow
 

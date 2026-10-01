@@ -7,6 +7,10 @@ export const PRO_PRICE_LABEL = "$9 USD every 30 days";
 
 export type ShopPlan = "free" | "pro";
 
+export function proUnlocked(): boolean {
+  return process.env.PRO_UNLOCKED === "true";
+}
+
 const DEVICES: Device[] = ["desktop", "mobile"];
 
 export function targetsAllDevices(devices: Device[] | undefined): boolean {

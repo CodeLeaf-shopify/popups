@@ -5,6 +5,7 @@ import {
   partnerApiConfigured,
   planFromSubscription,
 } from "./partner-api.server";
+import { proUnlocked } from "./plans";
 import { publishPopup, syncManifest } from "./publish.server";
 import type {
   Behavior,
@@ -38,6 +39,7 @@ export async function runningTestForPopup(shop: string, popupId: string) {
 }
 
 async function assertPartnerPro(admin: AdminClient, shop: string): Promise<string | null> {
+  if (proUnlocked()) return null;
   if (!partnerApiConfigured()) return PRO_REQUIRED;
   try {
     const data = await adminGraphql<{ shop: { id: string } }>(admin, SHOP_ID_QUERY);
