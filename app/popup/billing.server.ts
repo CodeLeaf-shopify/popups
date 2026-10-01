@@ -1,18 +1,15 @@
 import prisma from "../db.server";
-import { PRO_PLAN } from "../shopify.server";
 import { adminGraphql, type AdminClient } from "./admin-graphql.server";
+import {
+  fetchActiveSubscription,
+  partnerApiConfigured,
+  planFromSubscription,
+} from "./partner-api.server";
 import { PLAN_STALE_MS, type ShopPlan } from "./plans";
 
-const SUBSCRIPTION_QUERY = `#graphql
-  query LeafPopupsSubscription {
-    currentAppInstallation {
-      activeSubscriptions {
-        id
-        name
-        status
-        test
-      }
-    }
+const SHOP_ID_QUERY = `#graphql
+  query LeafPopupsShopId {
+    shop { id }
   }
 `;
 
@@ -26,17 +23,8 @@ const SHOP_PLAN_QUERY = `#graphql
   }
 `;
 
-type SubscriptionNode = {
-  id: string;
-  name: string;
-  status: string;
-  test: boolean;
-};
-
 export type PlanSnapshot = {
   plan: ShopPlan;
-  subscriptionId: string | null;
-  test: boolean;
   unpublished: string[];
 };
 
@@ -51,16 +39,9 @@ function parseNames(value: string | null | undefined): string[] {
   }
 }
 
-function snapshot(row: {
-  plan: string;
-  subscriptionId: string | null;
-  test: boolean;
-  unpublishedNames: string;
-}): PlanSnapshot {
+function snapshot(row: { plan: string; unpublishedNames: string }): PlanSnapshot {
   return {
     plan: row.plan === "pro" ? "pro" : "free",
-    subscriptionId: row.subscriptionId,
-    test: row.test,
     unpublished: parseNames(row.unpublishedNames),
   };
 }
@@ -70,19 +51,14 @@ export async function shopIsDevelopment(admin: AdminClient): Promise<boolean> {
   return data.shop.plan.partnerDevelopment === true;
 }
 
-export function plansReturnUrl(): string {
-  const base = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
-  return `${base}/app/plans`;
+async function shopGid(admin: AdminClient): Promise<string> {
+  const data = await adminGraphql<{ shop: { id: string } }>(admin, SHOP_ID_QUERY);
+  return data.shop.id;
 }
 
 export async function syncPlanFromAdmin(admin: AdminClient, shop: string): Promise<PlanSnapshot> {
-  const data = await adminGraphql<{
-    currentAppInstallation: { activeSubscriptions: SubscriptionNode[] };
-  }>(admin, SUBSCRIPTION_QUERY);
-  const active = data.currentAppInstallation.activeSubscriptions.find(
-    (subscription) => subscription.name === PRO_PLAN && subscription.status === "ACTIVE",
-  );
-  const plan: ShopPlan = active ? "pro" : "free";
+  const subscription = await fetchActiveSubscription(await shopGid(admin));
+  const plan: ShopPlan = planFromSubscription(subscription);
   const existing = await prisma.shopBilling.findUnique({ where: { shop } });
   const unpublishedNames = plan === "pro" ? "[]" : (existing?.unpublishedNames ?? "[]");
   const row = await prisma.shopBilling.upsert({
@@ -90,17 +66,13 @@ export async function syncPlanFromAdmin(admin: AdminClient, shop: string): Promi
     create: {
       shop,
       plan,
-      subscriptionId: active?.id ?? null,
-      status: active?.status ?? "INACTIVE",
-      test: active?.test ?? false,
+      status: plan,
       unpublishedNames,
       checkedAt: new Date(),
     },
     update: {
       plan,
-      subscriptionId: active?.id ?? null,
-      status: active?.status ?? existing?.status ?? "INACTIVE",
-      test: active?.test ?? false,
+      status: plan,
       unpublishedNames,
       checkedAt: new Date(),
     },
@@ -118,13 +90,15 @@ export async function getShopPlan(
   let current: PlanSnapshot;
   if (cached && fresh && !options?.force) {
     current = snapshot(cached);
+  } else if (!partnerApiConfigured()) {
+    current = cached ? snapshot(cached) : { plan: "free", unpublished: [] };
   } else {
     try {
       current = await syncPlanFromAdmin(admin, shop);
     } catch (error) {
       console.error("Unable to refresh the Leaf Popups plan", error);
       if (cached) return snapshot(cached);
-      return { plan: "free", subscriptionId: null, test: false, unpublished: [] };
+      return { plan: "free", unpublished: [] };
     }
   }
 

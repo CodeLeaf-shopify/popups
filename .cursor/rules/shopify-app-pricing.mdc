@@ -1,0 +1,15 @@
+---
+description: App charges must use Shopify App Pricing
+alwaysApply: true
+---
+
+# Shopify app charges
+
+Leaf Popups is a public app. App charges use Shopify App Pricing. Shopify hosts the plan page and creates the subscription. The app does not charge the merchant itself.
+
+- Do not use Stripe, PayPal, or any other off-platform checkout for app charges.
+- Do not call `appSubscriptionCreate` or `billing.request`. Do not add a `billing` config to `shopifyApp`.
+- Do not put the charged price in code. Configure Free and Pro in the Partner Dashboard. The Pro plan handle is `pro`.
+- Send the merchant to `https://admin.shopify.com/store/{store_handle}/charges/{app_handle}/pricing_plans` with `redirect(url, { target: "_top" })`. Do not render a second plans page in the app.
+- Read the current plan with the Partner API `activeSubscription` query. Grant Pro only when an item handle is `pro`. No subscription means Free.
+- A development store can show a $0 price for Pro. Use the plan handle, not the amount.

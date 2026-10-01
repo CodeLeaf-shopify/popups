@@ -1,7 +1,8 @@
 import type { Behavior, Device, Schedule } from "./types";
 
 export const FREE_PUBLISHED_LIMIT = 3;
-export const PLAN_STALE_MS = 15 * 60 * 1000;
+export const PLAN_STALE_MS = 5 * 60 * 1000;
+export const PRO_PLAN_HANDLE = "pro";
 export const PRO_PRICE_LABEL = "$9 USD every 30 days";
 
 export type ShopPlan = "free" | "pro";
