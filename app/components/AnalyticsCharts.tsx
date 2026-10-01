@@ -182,8 +182,8 @@ export function SubmitRateBars({ a, b }: { a: AnalyticsVariant; b: AnalyticsVari
       role="img"
       aria-label={`Variant A submit rate ${ratePhrase(a.submitRate)}. Variant B submit rate ${ratePhrase(b.submitRate)}.`}
       viewBox="0 0 280 40"
-      width="280"
-      height="40"
+      width="100%"
+      height="auto"
     >
       <text x="0" y="12" fontSize="11" fill={LABEL}>
         A

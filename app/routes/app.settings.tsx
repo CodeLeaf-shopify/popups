@@ -100,6 +100,7 @@ export default function SettingsPage() {
       <s-button slot="primary-action" variant="primary" onClick={save} {...(saving ? { loading: true } : {})}>
         Save
       </s-button>
+      <s-query-container>
       <s-stack direction="block" gap="base">
         {result && !result.ok ? <s-banner tone="critical">{result.error}</s-banner> : null}
         {result?.ok && result.warning ? (
@@ -183,7 +184,7 @@ export default function SettingsPage() {
               value={settings.tokens.overlay}
               onValue={(overlay) => updateTokens({ overlay })}
             />
-            <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+            <s-grid gridTemplateColumns="@container (inline-size > 500px) 1fr 1fr, 1fr" gap="base">
               <NumberInput
                 label="Modal width"
                 value={settings.tokens.width}
@@ -237,6 +238,7 @@ export default function SettingsPage() {
           </s-stack>
         </s-section>
       </s-stack>
+      </s-query-container>
     </s-page>
   );
 }

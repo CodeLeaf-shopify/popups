@@ -45,15 +45,12 @@ export default function StatsPage() {
     <s-page heading="Analytics" inlineSize="large">
       <s-query-container>
         <s-stack direction="block" gap="base">
-          <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
-            <s-text color="subdued">Last {data.days} days</s-text>
-            <s-button-group gap="none" accessibilityLabel="Date range">
-              {ANALYTICS_RANGES.map((range) => (
-                <s-button key={range} href={`/app/stats?range=${range}`} variant={data.days === range ? "primary" : "secondary"}>
-                  {range} days
-                </s-button>
-              ))}
-            </s-button-group>
+          <s-stack direction="inline" gap="small-200" alignItems="center">
+            {ANALYTICS_RANGES.map((range) => (
+              <s-button key={range} href={`/app/stats?range=${range}`} variant={data.days === range ? "primary" : "secondary"}>
+                {range} days
+              </s-button>
+            ))}
           </s-stack>
           {data.rows.length === 0 ? (
             <s-section heading="Popups">
@@ -61,37 +58,42 @@ export default function StatsPage() {
             </s-section>
           ) : (
             <s-stack direction="block" gap="base">
-              <s-grid
-                gridTemplateColumns="@container (inline-size > 900px) repeat(4, minmax(0, 1fr)), repeat(2, minmax(0, 1fr))"
-                gap="base"
-              >
-                <MetricCard label="Views" value={formatCount(data.totals.views)} change={data.viewsChange} days={data.days} />
-                <MetricCard
-                  label="Click rate"
-                  value={formatRate(data.rates.click)}
-                  detail={formatNoun(data.totals.clicks, "click")}
-                  change={data.clickRateChange}
-                  days={data.days}
-                />
-                <MetricCard
-                  label="Submit rate"
-                  value={formatRate(data.rates.submit)}
-                  detail={formatNoun(data.totals.submits, "submit")}
-                  change={data.submitRateChange}
-                  days={data.days}
-                />
-                <MetricCard
-                  label="Dismiss rate"
-                  value={formatRate(data.rates.dismiss)}
-                  detail={formatNoun(data.totals.dismissals, "dismissal", "dismissals")}
-                  change={data.dismissRateChange}
-                  days={data.days}
-                />
-              </s-grid>
-              <s-grid
-                gridTemplateColumns="@container (inline-size > 800px) minmax(0, 1fr) minmax(0, 1fr), minmax(0, 1fr)"
-                gap="base"
-              >
+              <s-section heading="Summary">
+                <s-grid
+                  gridTemplateColumns="@container (inline-size > 700px) 1fr 1fr 1fr 1fr, 1fr 1fr"
+                  gap="base"
+                >
+                  <MetricRow
+                    label="Views"
+                    value={data.totals.views === 0 ? "—" : formatCount(data.totals.views)}
+                    detail={formatNoun(data.totals.views, "view")}
+                    change={data.viewsChange}
+                    days={data.days}
+                  />
+                  <MetricRow
+                    label="Click rate"
+                    value={formatRate(data.rates.click)}
+                    detail={formatNoun(data.totals.clicks, "click")}
+                    change={data.clickRateChange}
+                    days={data.days}
+                  />
+                  <MetricRow
+                    label="Submit rate"
+                    value={formatRate(data.rates.submit)}
+                    detail={formatNoun(data.totals.submits, "submit")}
+                    change={data.submitRateChange}
+                    days={data.days}
+                  />
+                  <MetricRow
+                    label="Dismiss rate"
+                    value={formatRate(data.rates.dismiss)}
+                    detail={formatNoun(data.totals.dismissals, "dismissal", "dismissals")}
+                    change={data.dismissRateChange}
+                    days={data.days}
+                  />
+                </s-grid>
+              </s-section>
+              <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, 1fr" gap="base">
                 <s-section heading="Traffic">
                   <TrafficChart series={data.series} />
                 </s-section>
@@ -148,7 +150,7 @@ export default function StatsPage() {
   );
 }
 
-function MetricCard({
+function MetricRow({
   label,
   value,
   detail,
@@ -162,14 +164,12 @@ function MetricCard({
   days: number;
 }) {
   return (
-    <s-section accessibilityLabel={label}>
-      <s-stack direction="block" gap="small-200">
-        <s-text color="subdued">{label}</s-text>
-        <s-heading>{value}</s-heading>
-        {detail ? <s-text color="subdued">{detail}</s-text> : null}
-        {change != null ? <s-text color="subdued">{formatChange(change, days)}</s-text> : null}
-      </s-stack>
-    </s-section>
+    <s-stack direction="block" gap="small-500">
+      <s-text color="subdued">{label}</s-text>
+      <s-text type="strong">{value}</s-text>
+      {detail ? <s-text color="subdued">{detail}</s-text> : null}
+      {change != null ? <s-text color="subdued">{formatChange(change, days)}</s-text> : null}
+    </s-stack>
   );
 }
 
@@ -179,8 +179,17 @@ function TestCard({ test }: { test: AnalyticsTestReadout }) {
   return (
     <s-box background="subdued" padding="base" borderRadius="base">
       <s-stack direction="block" gap="base">
-        <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
-          <s-stack direction="inline" gap="small-200" alignItems="center">
+        <s-stack
+          direction="@container (inline-size > 540px) inline, block"
+          gap="base"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <s-stack
+            direction="@container (inline-size > 540px) inline, block"
+            gap="small-200"
+            alignItems="center"
+          >
             <s-text type="strong">{test.status === "running" ? "Running" : "Completed"}</s-text>
             <s-text color="subdued">
               {test.status === "running" ? "Since the test started" : `Winner is ${winnerName(test)}.`}
@@ -207,7 +216,7 @@ function VariantLine({
   badge: "leading" | "winner" | null;
 }) {
   return (
-    <s-stack direction="inline" gap="base" alignItems="center">
+    <s-stack direction="@container (inline-size > 540px) inline, block" gap="base" alignItems="center">
       <s-text>{letter} ·</s-text>
       {variant.available ? <s-link href={`/app/popups/${variant.id}`}>{variant.name}</s-link> : <s-text>{variant.name}</s-text>}
       {badge === "leading" ? <s-badge tone="info">Leading</s-badge> : null}

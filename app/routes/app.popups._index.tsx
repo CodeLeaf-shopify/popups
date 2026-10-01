@@ -97,7 +97,7 @@ export default function PopupsIndex() {
         <s-table-header listSlot="labeled">Format</s-table-header>
         <s-table-header listSlot="labeled">Trigger</s-table-header>
         <s-table-header listSlot="labeled">Updated</s-table-header>
-        <s-table-header>Actions</s-table-header>
+        <s-table-header listSlot="labeled">Actions</s-table-header>
       </s-table-header-row>
       <s-table-body>
         {rows.map((popup) => (

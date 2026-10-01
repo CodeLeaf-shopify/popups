@@ -776,6 +776,7 @@ function NodeFields({
 
   if (type === "stack") {
     return (
+      <s-query-container>
       <s-stack direction="block" gap="base">
         <s-select
           label="Direction"
@@ -785,7 +786,7 @@ function NodeFields({
           <s-option value="column">Vertical</s-option>
           <s-option value="row">Horizontal</s-option>
         </s-select>
-        <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+        <s-grid gridTemplateColumns="@container (inline-size > 500px) 1fr 1fr, 1fr" gap="base">
           <NumberInput
             label="Gap"
             value={Number(style.gap ?? 12)}
@@ -804,6 +805,7 @@ function NodeFields({
           />
         </s-grid>
       </s-stack>
+      </s-query-container>
     );
   }
 

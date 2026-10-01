@@ -421,7 +421,10 @@ export function PopupEditor({
         {!compiled.ok ? <s-banner tone="warning">{compiled.error}</s-banner> : null}
         <s-query-container>
           <s-stack direction="block" gap="base">
-            <s-grid gridTemplateColumns="minmax(0, 1fr) 360px" gap="base">
+            <s-grid
+              gridTemplateColumns="@container (inline-size > 960px) minmax(0, 1fr) 360px, minmax(0, 1fr)"
+              gap="base"
+            >
             <s-section>
               <s-stack direction="block" gap="base">
                 <s-grid gridTemplateColumns="@container (inline-size > 560px) minmax(0, 1fr) auto, minmax(0, 1fr)" gap="base" alignItems="end">
@@ -441,7 +444,12 @@ export function PopupEditor({
                     <s-text color="subdued">{saving ? "Saving…" : unsaved ? "Unsaved changes" : "Saved"}</s-text>
                   </s-stack>
                 </s-grid>
-                <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
+                <s-stack
+                  direction="@container (inline-size > 520px) inline, block"
+                  gap="base"
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
                   <s-button-group gap="none" accessibilityLabel="Preview mode">
                     <s-button
                       variant={editor.session.mode === "edit" ? "primary" : "secondary"}
