@@ -3,11 +3,11 @@
 All screenshots are 1600 × 900 PNG files.
 
 1. `01-popup-builder.png`
-   - Alt text: Leaf Popups editor showing an email signup popup, desktop preview controls, and its content structure.
+   - Alt text: Custom popup editor showing a promotional form popup, desktop preview controls, and editable content blocks.
 2. `02-popup-list.png`
-   - Alt text: Leaf Popups campaign list showing published and draft modal and announcement popup campaigns.
+   - Alt text: Popup campaign list showing published and draft modal and announcement campaigns.
 3. `03-storefront-settings.png`
-   - Alt text: Leaf Popups settings for storefront availability, audience rules, popup priority, colors, and excluded paths.
+   - Alt text: Popup settings for storefront availability, audience rules, campaign priority, colors, and excluded paths.
 4. `04-storefront-popup.png`
    - Alt text: Email signup popup displayed over a clothing storefront.
 
