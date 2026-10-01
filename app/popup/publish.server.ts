@@ -16,6 +16,7 @@ import {
   resolveTokens,
   type Behavior,
   type EditorDocument,
+  type ExperimentVariant,
   type Manifest,
   type ManifestCampaign,
   type StorefrontPayload,
@@ -45,6 +46,23 @@ async function campaignFromPopup(popup: Popup): Promise<ManifestCampaign | null>
   };
 }
 
+async function annotateRunningTests(shop: string, campaigns: ManifestCampaign[]): Promise<void> {
+  const publishedIds = new Set(campaigns.map((campaign) => campaign.id));
+  const tests = await prisma.popupTest.findMany({ where: { shop, status: "running" } });
+  const marks = new Map<string, { testId: string; variant: ExperimentVariant }>();
+  for (const test of tests) {
+    if (!publishedIds.has(test.variantAId) || !publishedIds.has(test.variantBId)) continue;
+    marks.set(test.variantAId, { testId: test.id, variant: "a" });
+    marks.set(test.variantBId, { testId: test.id, variant: "b" });
+  }
+  for (const campaign of campaigns) {
+    const mark = marks.get(campaign.id);
+    if (!mark) continue;
+    campaign.testId = mark.testId;
+    campaign.variant = mark.variant;
+  }
+}
+
 export async function syncManifest(
   admin: AdminClient,
   shop: string,
@@ -56,6 +74,7 @@ export async function syncManifest(
     if (campaign) campaigns.push(campaign);
   }
   campaigns.sort((left, right) => right.priority - left.priority);
+  await annotateRunningTests(shop, campaigns);
   const settings = manifestSettings(await getShopSettings(shop));
   const manifest: Manifest = {
     revision: contentRevision({ settings, campaigns }),
@@ -213,6 +232,15 @@ export async function setPopupStatus(
 ): Promise<{ ok: true; updatedAt: string } | { ok: false; error: string }> {
   const existing = await prisma.popup.findFirst({ where: { id: popupId, shop } });
   if (!existing) return { ok: false, error: "Popup not found." };
+  const running = await prisma.popupTest.findFirst({
+    where: {
+      shop,
+      status: "running",
+      OR: [{ variantAId: popupId }, { variantBId: popupId }],
+    },
+    select: { id: true },
+  });
+  if (running) return { ok: false, error: "Pick a winner to end this test." };
   const updated = await prisma.popup.update({
     where: { id: popupId },
     data: { status },

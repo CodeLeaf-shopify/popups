@@ -14,14 +14,19 @@ import { authenticate } from "../shopify.server";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const plan = await getShopPlan(admin, session.shop);
-  const [popups, publication] = await Promise.all([
+  const [popups, publication, runningTests] = await Promise.all([
     prisma.popup.findMany({
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
       select: { id: true, name: true, status: true, draftBehavior: true, updatedAt: true },
     }),
     prisma.publication.findUnique({ where: { shop: session.shop } }),
+    prisma.popupTest.findMany({
+      where: { shop: session.shop, status: "running" },
+      select: { variantAId: true, variantBId: true },
+    }),
   ]);
+  const testing = new Set(runningTests.flatMap((test) => [test.variantAId, test.variantBId]));
 
   return {
     shop: session.shop,
@@ -33,6 +38,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       name: popup.name,
       status: popupStatus(popup.status),
       ...behaviorSummary(popup.draftBehavior),
+      inTest: testing.has(popup.id),
       updatedAt: popup.updatedAt.toISOString(),
     })),
     publicationError: publication?.syncStatus === "failed" ? publication.error : null,
@@ -100,7 +106,10 @@ export default function PopupsIndex() {
               <s-link href={`/app/popups/${popup.id}`}>{popup.name}</s-link>
             </s-table-cell>
             <s-table-cell>
-              <s-badge tone={toneFor(popup.status)}>{labelFor(popup.status)}</s-badge>
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <s-badge tone={toneFor(popup.status)}>{labelFor(popup.status)}</s-badge>
+                {popup.inTest ? <s-badge tone="info">In test</s-badge> : null}
+              </s-stack>
             </s-table-cell>
             <s-table-cell>{popup.presentation}</s-table-cell>
             <s-table-cell>{popup.trigger}</s-table-cell>

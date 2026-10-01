@@ -134,6 +134,23 @@ export type CustomerState = {
   codes: Record<string, string>;
 };
 
+export type ExperimentVariant = "a" | "b";
+
+export type ExperimentRow = {
+  id: string;
+  name: string;
+  variant: ExperimentVariant;
+  views: number;
+  clicks: number;
+  submits: number;
+  dismissals: number;
+};
+
+export type PopupExperiment = {
+  id: string;
+  rows: ExperimentRow[];
+};
+
 export type ManifestCampaign = {
   id: string;
   revision: string;
@@ -145,6 +162,8 @@ export type ManifestCampaign = {
   schedule: Schedule;
   targeting: Targeting;
   url: string;
+  testId?: string;
+  variant?: ExperimentVariant;
 };
 
 export type ConflictMode = "all" | "queue" | "single";

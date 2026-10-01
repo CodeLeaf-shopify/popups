@@ -1,5 +1,6 @@
 (function () {
   var STORAGE_KEY = "leaf_popups_state";
+  var ASSIGNMENT_KEY = "leaf_popups_tests";
   var boot = null;
   var running = false;
 
@@ -288,6 +289,57 @@
     return value;
   }
 
+  function readAssignments() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(ASSIGNMENT_KEY) || "");
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed;
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function writeAssignments(assignments) {
+    try {
+      localStorage.setItem(ASSIGNMENT_KEY, JSON.stringify(assignments));
+    } catch (error) {
+      return;
+    }
+  }
+
+  function splitTests(campaigns) {
+    var assignments = readAssignments();
+    var groups = {};
+    var rest = [];
+    var dirty = false;
+    campaigns.forEach(function (campaign) {
+      if (!campaign.testId || (campaign.variant !== "a" && campaign.variant !== "b")) {
+        rest.push(campaign);
+        return;
+      }
+      if (!groups[campaign.testId]) groups[campaign.testId] = [];
+      groups[campaign.testId].push(campaign);
+    });
+    Object.keys(groups).forEach(function (testId) {
+      var group = groups[testId];
+      var variants = {};
+      group.forEach(function (campaign) { variants[campaign.variant] = campaign; });
+      if (!variants.a || !variants.b) {
+        group.forEach(function (campaign) { rest.push(campaign); });
+        return;
+      }
+      var chosen = assignments[testId];
+      if (chosen !== "a" && chosen !== "b") {
+        chosen = Math.random() < 0.5 ? "a" : "b";
+        assignments[testId] = chosen;
+        dirty = true;
+      }
+      rest.push(variants[chosen]);
+    });
+    if (dirty) writeAssignments(assignments);
+    return rest;
+  }
+
   function loadManifest() {
     var local = normalizeManifest(boot.manifest);
     if (local && local.campaigns.length) return Promise.resolve(local);
@@ -332,7 +384,7 @@
           if (typeof console !== "undefined") console.info("[Leaf Popups] Popups are paused in Settings.");
           return null;
         }
-        var campaigns = manifest.campaigns;
+        var campaigns = splitTests(manifest.campaigns);
         var state = mergedState();
         var path = boot.path || window.location.pathname;
         var blocked =

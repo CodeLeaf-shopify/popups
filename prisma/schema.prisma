@@ -46,10 +46,26 @@ model Popup {
   contentRevision  String?
   assetUrl         String?
   publishedTokens  String?
+  testId           String?
+  variant          String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@index([shop])
+  @@index([testId])
+}
+
+model PopupTest {
+  id         String    @id @default(cuid())
+  shop       String
+  status     String    @default("running")
+  variantAId String
+  variantBId String
+  winnerId   String?
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+
+  @@index([shop, status])
 }
 
 model Publication {
@@ -87,11 +103,13 @@ model PopupDailyStat {
   shop       String
   popupId    String
   day        String
+  testId     String @default("")
   views      Int    @default(0)
   clicks     Int    @default(0)
   submits    Int    @default(0)
   dismissals Int    @default(0)
 
-  @@unique([shop, popupId, day])
+  @@unique([shop, popupId, day, testId])
   @@index([shop, day])
+  @@index([shop, testId])
 }

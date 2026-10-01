@@ -4,7 +4,7 @@ import { useFetcher } from "react-router";
 import { compile } from "../popup/compile";
 import { createEditorState, editorReducer, type EditorDevice } from "../popup/editor-state";
 import { stableStringify } from "../popup/stable-stringify";
-import type { Behavior, Command, EditorDocument, PopupStatus, StorefrontPayload, Tokens } from "../popup/types";
+import type { Behavior, Command, EditorDocument, PopupExperiment, PopupStatus, StorefrontPayload, Tokens } from "../popup/types";
 import { DesignPanel, PopupSettingsPanel, StructurePanel } from "./PropertyPanel";
 
 type PreviewLink = { url: string; expiresAt: number };
@@ -19,6 +19,7 @@ type SaveResponse = {
   preview?: PreviewLink;
   payload?: StorefrontPayload;
   behavior?: Behavior;
+  experiment?: PopupExperiment | null;
 };
 
 type PopupEditorProps = {
@@ -37,6 +38,7 @@ type PopupEditorProps = {
   globalTokens: Tokens;
   hiddenForLoggedInGlobally: boolean;
   pro: boolean;
+  experiment: PopupExperiment | null;
 };
 
 const DEVICE_WIDTHS: Record<EditorDevice, number | string> = {
@@ -62,6 +64,7 @@ export function PopupEditor({
   globalTokens,
   hiddenForLoggedInGlobally,
   pro,
+  experiment,
 }: PopupEditorProps) {
   const [editor, dispatch] = useReducer(
     editorReducer,
@@ -72,6 +75,7 @@ export function PopupEditor({
   const publishFetcher = useFetcher<SaveResponse>();
   const statusFetcher = useFetcher<SaveResponse>();
   const previewFetcher = useFetcher<SaveResponse>();
+  const testFetcher = useFetcher<SaveResponse>();
   const saveFetcherRef = useRef(saveFetcher);
   const previewFetcherRef = useRef(previewFetcher);
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -89,6 +93,13 @@ export function PopupEditor({
   const [seenPublish, setSeenPublish] = useState(publishFetcher.data);
   const [seenStatus, setSeenStatus] = useState(statusFetcher.data);
   const [seenPreview, setSeenPreview] = useState(previewFetcher.data);
+  const [seenTest, setSeenTest] = useState(testFetcher.data);
+  const [pendingWinner, setPendingWinner] = useState<string | null>(null);
+  const [startedDraft, setStartedDraft] = useState<{
+    name: string;
+    document: EditorDocument;
+    behavior: Behavior;
+  } | null>(null);
   const key = draftKey(editor.meta.name, editor.document, editor.behavior);
   const compiled = useMemo(
     () => compile(editor.document, editor.behavior, globalTokens),
@@ -183,6 +194,47 @@ export function PopupEditor({
     if (previewFetcher.data?.ok && previewFetcher.data.preview) setPreview(previewFetcher.data.preview);
   }
 
+  if (testFetcher.data !== seenTest) {
+    setSeenTest(testFetcher.data);
+    const data = testFetcher.data;
+    if (data?.ok && data.intent === "start-test") {
+      const submitted = startedDraft;
+      if (data.updatedAt) setSavedAt(data.updatedAt);
+      if (data.status) dispatch({ type: "status", status: data.status });
+      if (data.payload) setPublishedPayload(data.payload);
+      const serverBehavior = data.behavior;
+      if (serverBehavior && submitted) {
+        if (stableStringify(editor.behavior) === stableStringify(submitted.behavior)) {
+          dispatch({ type: "replaceBehavior", behavior: serverBehavior });
+        } else if (
+          editor.behavior.discount &&
+          serverBehavior.discount &&
+          editor.behavior.discount.mode === serverBehavior.discount.mode &&
+          (!editor.behavior.discount.code || editor.behavior.discount.code === serverBehavior.discount.code)
+        ) {
+          dispatch({
+            type: "replaceBehavior",
+            behavior: {
+              ...editor.behavior,
+              discount: {
+                ...editor.behavior.discount,
+                code: serverBehavior.discount.code,
+                shopifyDiscountId: serverBehavior.discount.shopifyDiscountId,
+              },
+            },
+          });
+        }
+        setSavedKey(draftKey(submitted.name, submitted.document, serverBehavior));
+      }
+      setConflict(null);
+    } else if (data?.ok && data.intent === "choose-winner") {
+      if (data.updatedAt) setSavedAt(data.updatedAt);
+      if (data.status) dispatch({ type: "status", status: data.status });
+      if (data.status !== "published") setPublishedPayload(null);
+      setConflict(null);
+    }
+  }
+
   useEffect(() => {
     saveFetcherRef.current = saveFetcher;
     previewFetcherRef.current = previewFetcher;
@@ -223,7 +275,11 @@ export function PopupEditor({
     postPreview();
   }, [compiled, editor.session.mode, editor.session.selectedId]);
 
-  const busy = publishFetcher.state !== "idle" || statusFetcher.state !== "idle";
+  const busy = publishFetcher.state !== "idle" || statusFetcher.state !== "idle" || testFetcher.state !== "idle";
+  const startedExperiment =
+    testFetcher.data?.ok && testFetcher.data.intent === "start-test" ? (testFetcher.data.experiment ?? null) : null;
+  const activeExperiment =
+    testFetcher.data?.ok && testFetcher.data.intent === "choose-winner" ? null : (experiment ?? startedExperiment);
 
   useEffect(() => {
     if (key === savedKey || busy) return;
@@ -279,13 +335,37 @@ export function PopupEditor({
   }
 
   function unpublish() {
+    if (activeExperiment) return;
     submit(statusFetcher, { intent: "unpublish", updatedAt: savedAt });
   }
 
+  function startTest() {
+    setPendingWinner(null);
+    setStartedDraft({
+      name: editor.meta.name,
+      document: editor.document,
+      behavior: editor.behavior,
+    });
+    submit(testFetcher, {
+      intent: "start-test",
+      name: editor.meta.name,
+      document: editor.document,
+      behavior: editor.behavior,
+      updatedAt: savedAt,
+      clientKey: key,
+    });
+  }
+
+  function chooseWinner(winnerId: string) {
+    setPendingWinner(winnerId);
+    submit(testFetcher, { intent: "choose-winner", winnerId, updatedAt: savedAt });
+  }
+
   const unpublishLoading = statusFetcher.state !== "idle" ? { loading: true } : {};
+  const testLocked = activeExperiment ? { disabled: true } : {};
   const primaryAction =
     published && !hasChanges ? (
-      <s-button slot="primary-action" variant="primary" {...unpublishLoading} onClick={unpublish}>
+      <s-button slot="primary-action" variant="primary" {...unpublishLoading} {...testLocked} onClick={unpublish}>
         Unpublish
       </s-button>
     ) : (
@@ -307,7 +387,7 @@ export function PopupEditor({
         <s-button
           slot="secondary-actions"
           {...unpublishLoading}
-          {...(publishFetcher.state !== "idle" ? { disabled: true } : {})}
+          {...(publishFetcher.state !== "idle" || activeExperiment ? { disabled: true } : {})}
           onClick={unpublish}
         >
           Unpublish
@@ -433,10 +513,123 @@ export function PopupEditor({
                 onCommand={(command, coalesceKey) => dispatch({ type: "command", command, coalesceKey })}
               />
             </s-grid>
+            <TestSection
+              pro={pro}
+              published={published}
+              experiment={activeExperiment}
+              popupId={editor.meta.id}
+              canStart={compiled.ok}
+              starting={testFetcher.state !== "idle" && pendingWinner == null}
+              choosing={testFetcher.state !== "idle"}
+              pendingWinner={pendingWinner}
+              error={testFetcher.data && !testFetcher.data.ok ? testFetcher.data.error : undefined}
+              onStart={startTest}
+              onChoose={chooseWinner}
+            />
           </s-stack>
         </s-query-container>
       </s-stack>
     </s-page>
+  );
+}
+
+function TestSection({
+  pro,
+  published,
+  experiment,
+  popupId,
+  canStart,
+  starting,
+  choosing,
+  pendingWinner,
+  error,
+  onStart,
+  onChoose,
+}: {
+  pro: boolean;
+  published: boolean;
+  experiment: PopupExperiment | null;
+  popupId: string;
+  canStart: boolean;
+  starting: boolean;
+  choosing: boolean;
+  pendingWinner: string | null;
+  error?: string;
+  onStart: () => void;
+  onChoose: (winnerId: string) => void;
+}) {
+  return (
+    <s-section heading="A/B test">
+      <s-stack direction="block" gap="base">
+        {error ? <s-banner tone="critical">{error}</s-banner> : null}
+        {!pro ? (
+          <s-stack direction="block" gap="base">
+            <s-paragraph>A/B tests are part of the Pro plan.</s-paragraph>
+            <s-button variant="primary" href="/app/plans">
+              View plans
+            </s-button>
+          </s-stack>
+        ) : experiment ? (
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Traffic is split evenly between these variants. Totals count only this test. Choose a winner to keep it
+              published and return the other variant to a draft.
+            </s-paragraph>
+            <s-table variant="auto">
+              <s-table-header-row>
+                <s-table-header listSlot="primary">Variant</s-table-header>
+                <s-table-header listSlot="labeled">Views</s-table-header>
+                <s-table-header listSlot="labeled">Clicks</s-table-header>
+                <s-table-header listSlot="labeled">Submits</s-table-header>
+                <s-table-header listSlot="labeled">Dismissals</s-table-header>
+                <s-table-header>Winner</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {experiment.rows.map((row) => (
+                  <s-table-row key={row.id}>
+                    <s-table-cell>
+                      {row.variant === "a" ? "A" : "B"}
+                      {" · "}
+                      {row.id === popupId ? row.name : <s-link href={`/app/popups/${row.id}`}>{row.name}</s-link>}
+                    </s-table-cell>
+                    <s-table-cell>{row.views}</s-table-cell>
+                    <s-table-cell>{row.clicks}</s-table-cell>
+                    <s-table-cell>{row.submits}</s-table-cell>
+                    <s-table-cell>{row.dismissals}</s-table-cell>
+                    <s-table-cell>
+                      <s-button
+                        variant="secondary"
+                        onClick={() => onChoose(row.id)}
+                        {...(choosing && pendingWinner === row.id ? { loading: true } : {})}
+                        {...(choosing ? { disabled: true } : {})}
+                      >
+                        Choose as winner
+                      </s-button>
+                    </s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          </s-stack>
+        ) : published ? (
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Split storefront traffic evenly between this popup and a copy. You choose the winner.
+            </s-paragraph>
+            <s-button
+              variant="primary"
+              onClick={onStart}
+              {...(starting ? { loading: true } : {})}
+              {...(!canStart || (choosing && !starting) ? { disabled: true } : {})}
+            >
+              Start test
+            </s-button>
+          </s-stack>
+        ) : (
+          <s-paragraph>Publish this popup before starting a test.</s-paragraph>
+        )}
+      </s-stack>
+    </s-section>
   );
 }
 

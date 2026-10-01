@@ -35,7 +35,20 @@ export async function assertCanPublish(
   return null;
 }
 
+async function manifestStillSplitsTests(shop: string): Promise<boolean> {
+  const publication = await prisma.publication.findUnique({ where: { shop }, select: { manifest: true } });
+  if (!publication?.manifest) return false;
+  try {
+    const parsed = JSON.parse(publication.manifest) as { campaigns?: { testId?: string }[] };
+    return Boolean(parsed.campaigns?.some((campaign) => campaign.testId));
+  } catch {
+    return false;
+  }
+}
+
 export async function enforceFreeLimits(admin: AdminClient, shop: string): Promise<string[]> {
+  const { endRunningTestsForFreePlan } = await import("./experiments.server");
+  const endedNames = await endRunningTestsForFreePlan(shop);
   const popups = await prisma.popup.findMany({ where: { shop, status: "published" } });
   const ranked = popups.map((popup) => {
     const behavior = liveBehavior(popup);
@@ -50,16 +63,20 @@ export async function enforceFreeLimits(admin: AdminClient, shop: string): Promi
     .sort((left, right) => right.priority - left.priority || right.popup.updatedAt.getTime() - left.popup.updatedAt.getTime());
   const keep = new Set(freeSafe.slice(0, FREE_PUBLISHED_LIMIT).map((entry) => entry.popup.id));
   const drop = ranked.filter((entry) => !keep.has(entry.popup.id));
-  if (!drop.length) return [];
+  const splitLeft = await manifestStillSplitsTests(shop);
+  const runningLeft = await prisma.popupTest.count({ where: { shop, status: "running" } });
+  if (!drop.length && !endedNames.length && !(splitLeft && runningLeft === 0)) return [];
 
-  await prisma.popup.updateMany({
-    where: { id: { in: drop.map((entry) => entry.popup.id) }, shop },
-    data: { status: "draft" },
-  });
+  if (drop.length) {
+    await prisma.popup.updateMany({
+      where: { id: { in: drop.map((entry) => entry.popup.id) }, shop },
+      data: { status: "draft" },
+    });
+  }
   const { syncManifest } = await import("./publish.server");
   const synced = await syncManifest(admin, shop);
   if (!synced.ok) throw new Error(synced.error);
-  const names = drop.map((entry) => entry.popup.name);
+  const names = [...endedNames, ...drop.map((entry) => entry.popup.name)];
   await rememberUnpublished(shop, names);
   return names;
 }

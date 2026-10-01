@@ -6,6 +6,7 @@ import { PopupEditor } from "../components/PopupEditor";
 import prisma from "../db.server";
 import { parseBehavior, parseEditorDocument, parsePayload } from "../popup/parse";
 import { previewLink } from "../popup/preview-token.server";
+import { chooseTestWinner, experimentForPopup, startPopupTest } from "../popup/experiments.server";
 import { publishPopup, setPopupStatus } from "../popup/publish.server";
 import { readRendererSource } from "../popup/renderer-source.server";
 import { getShopPlan } from "../popup/billing.server";
@@ -26,6 +27,7 @@ type EditorRequest = {
   behavior?: unknown;
   updatedAt?: string;
   clientKey?: string;
+  winnerId?: string;
 };
 
 function popupStatus(value: string): PopupStatus {
@@ -62,11 +64,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const behavior = syncDiscount(document, parseBehavior(JSON.parse(popup.draftBehavior)));
   const status = popupStatus(popup.status);
   const [settings, plan] = await Promise.all([getShopSettings(session.shop), getShopPlan(admin, session.shop)]);
+  const experiment = plan.plan === "pro" ? await experimentForPopup(session.shop, popup.id) : null;
   return {
     rendererSource: readRendererSource(),
     globalTokens: settings.tokens,
     hiddenForLoggedInGlobally: settings.hideForLoggedIn,
     pro: plan.plan === "pro",
+    experiment,
     document,
     behavior,
     updatedAt: popup.updatedAt.toISOString(),
@@ -99,6 +103,20 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 
+  if (intent === "choose-winner") {
+    try {
+      const result = await chooseTestWinner(admin, session.shop, popup.id, body.winnerId ?? "");
+      if (!result.ok) return { ok: false, intent, error: result.error };
+      return { ok: true, intent, updatedAt: result.updatedAt, status: result.status, experiment: null };
+    } catch (error) {
+      return {
+        ok: false,
+        intent,
+        error: error instanceof Error ? error.message : "The winner could not be saved.",
+      };
+    }
+  }
+
   if (intent === "unpublish") {
     const result = await setPopupStatus(admin, session.shop, popup.id, "draft");
     if (!result.ok) return { ok: false, intent, error: result.error };
@@ -119,6 +137,29 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
   const name = body.name?.trim() || popup.name;
   behavior = keepDiscountId(syncDiscount(document, behavior), popup.draftBehavior);
+
+  if (intent === "start-test") {
+    try {
+      const result = await startPopupTest(admin, session.shop, popup.id, name, document, behavior);
+      if (!result.ok) return { ok: false, intent, error: result.error };
+      return {
+        ok: true,
+        intent,
+        updatedAt: result.updatedAt,
+        status: "published" as const,
+        clientKey: body.clientKey,
+        payload: result.payload,
+        behavior: result.behavior,
+        experiment: result.experiment,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        intent,
+        error: error instanceof Error ? error.message : "The test could not be started.",
+      };
+    }
+  }
 
   if (intent === "publish") {
     try {
@@ -172,6 +213,7 @@ export default function PopupRoute() {
     globalTokens,
     hiddenForLoggedInGlobally,
     pro,
+    experiment,
   } = useLoaderData<typeof loader>();
   return (
     <PopupEditor
@@ -186,6 +228,7 @@ export default function PopupRoute() {
       globalTokens={globalTokens}
       hiddenForLoggedInGlobally={hiddenForLoggedInGlobally}
       pro={pro}
+      experiment={experiment}
     />
   );
 }

@@ -36,13 +36,21 @@ function seed(event: StatEvent): { views: number; clicks: number; submits: numbe
 export async function recordPopupStat(shop: string, popupId: string, event: StatEvent): Promise<void> {
   const popup = await prisma.popup.findFirst({
     where: { id: popupId, shop, status: "published" },
-    select: { id: true },
+    select: { id: true, testId: true },
   });
   if (!popup) return;
+  let testId = "";
+  if (popup.testId) {
+    const test = await prisma.popupTest.findFirst({
+      where: { id: popup.testId, shop, status: "running" },
+      select: { id: true },
+    });
+    if (test) testId = test.id;
+  }
   const day = utcDay();
   await prisma.popupDailyStat.upsert({
-    where: { shop_popupId_day: { shop, popupId, day } },
-    create: { shop, popupId, day, ...seed(event) },
+    where: { shop_popupId_day_testId: { shop, popupId, day, testId } },
+    create: { shop, popupId, day, testId, ...seed(event) },
     update: increment(event),
   });
 }
