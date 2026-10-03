@@ -160,5 +160,6 @@ short-lived token and never publish the draft.
 - The app embed must be deployed and enabled in the merchant's theme.
 - The leads workflow requires protected customer data approval before App Store
   distribution.
-- Mandatory privacy compliance webhooks must be implemented before App Store
-  submission.
+- Mandatory privacy compliance webhooks are registered in `shopify.app.toml` and
+  handled under `app/routes/webhooks.customers.*` / `webhooks.shop.redact`.
+  Deploy the app config before App Store submission. See `docs/data-protection.md`.

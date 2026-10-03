@@ -221,7 +221,7 @@ after opening the activation link.
 
 Before App Store submission or production launch:
 
-- implement and register Shopify's mandatory privacy compliance webhooks;
 - obtain protected customer data approval for the leads workflow;
+- deploy so privacy compliance webhooks and `/privacy` are live in production;
 - add automated tests and CI;
 - replace the inherited favicon with a Leaf Popups asset.

@@ -128,13 +128,13 @@ Replace the placeholder with a direct, public development-store page. Add a stor
 Replace each placeholder with a dedicated public page:
 
 - Developer website: `https://<your-domain>/`
-- Privacy policy: `https://<your-domain>/privacy`
+- Privacy policy: `https://leafpopups.codeleaf.co/privacy`
 - Support portal: `https://<your-domain>/support`
 - FAQ: `https://<your-domain>/help`
 - Documentation: `https://<your-domain>/docs`
 - Tutorial: `https://<your-domain>/docs/getting-started`
 - Changelog: `https://<your-domain>/changelog`
-- Support email: `support@<your-domain>`
+- Support email: `support@codeleaf.co`
 
 The privacy policy and working support contact are required.
 
@@ -181,7 +181,6 @@ The app requests customer access to save popup engagement and consent state and 
 
 - Replace the placeholder application and authentication URLs in `shopify.app.toml`.
 - Align the configured app name with the listing name and confirm the generic name passes Shopify's uniqueness check.
-- Implement and register Shopify's mandatory privacy compliance webhooks.
 - Obtain protected customer data approval for customer names and email addresses.
 - Publish the theme app extension and verify the theme embed on the demo store.
 - Add the public privacy, support, documentation, and demo-store URLs above.
