@@ -76,7 +76,6 @@ services:
 
 networks:
   backend:
-    internal: true
   frontend:
 
 volumes:

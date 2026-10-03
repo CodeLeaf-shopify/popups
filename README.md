@@ -139,6 +139,12 @@ Start or update the complete stack:
 docker compose up -d --build
 ```
 
+For PostgreSQL by itself during local development:
+
+```shell
+docker compose up -d db
+```
+
 Inspect its status and logs:
 
 ```shell
