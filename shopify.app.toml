@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "6d493493491df9358102bd36e5128e27"
-application_url = "https://shopify.dev/apps/default-app-home"
+application_url = "https://leafpopups.codeleaf.co"
 embedded = true
 name = "leaf-popups"
 
@@ -30,7 +30,7 @@ subpath = "leaf-popups"
 prefix = "apps"
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+redirect_urls = [ "https://leafpopups.codeleaf.co/api/auth" ]
 
 [build]
 automatically_update_urls_on_dev = true
