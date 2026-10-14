@@ -89,6 +89,8 @@ export async function getShopPlan(
   const cached = await prisma.shopBilling.findUnique({ where: { shop } });
   const fresh = cached != null && Date.now() - cached.checkedAt.getTime() < PLAN_STALE_MS;
   let current: PlanSnapshot;
+  // Free limits only need re-checking when the plan may have changed, not on every admin page load.
+  let refreshed = Boolean(options?.force) || cached == null;
   if (cached && fresh && !options?.force) {
     current = snapshot(cached);
   } else if (!partnerApiConfigured()) {
@@ -96,6 +98,7 @@ export async function getShopPlan(
   } else {
     try {
       current = await syncPlanFromAdmin(admin, shop);
+      refreshed = true;
     } catch (error) {
       console.error("Unable to refresh the Leaf Popups plan", error);
       if (cached) return snapshot(cached);
@@ -103,7 +106,7 @@ export async function getShopPlan(
     }
   }
 
-  if (current.plan !== "free") return current;
+  if (current.plan !== "free" || !refreshed) return current;
   try {
     const { enforceFreeLimits } = await import("./entitlements.server");
     const names = await enforceFreeLimits(admin, shop);

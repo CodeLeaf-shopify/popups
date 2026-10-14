@@ -52,7 +52,7 @@ function mergeState(current: CustomerState, popupId: string, patch: CustomerStat
 
 async function findOrCreateCustomer(admin: AdminClient, email: string, consent: boolean): Promise<string> {
   const found = await adminGraphql<{ customers: { nodes: { id: string }[] } }>(admin, FIND_CUSTOMER, {
-    query: `email:${email}`,
+    query: `email:"${email.replace(/["\\]/g, "\\$&")}"`,
   });
   const existing = found.customers.nodes[0]?.id;
   if (existing) return existing;
@@ -83,12 +83,14 @@ export async function recordPopupEvent(
   event: "shown" | "dismissed",
 ): Promise<SubmitResult> {
   if (!loggedInCustomerId) return { ok: true, state: emptyCustomerState(), message: "Stored in the browser." };
-  const popup = await prisma.popup.findFirst({ where: { id: popupId, shop } });
+  // Views are already kept in the browser; persisting each one would cost two Admin API calls per page view.
+  if (event === "shown") return { ok: true, state: emptyCustomerState(), message: "Stored in the browser." };
+  const popup = await prisma.popup.findFirst({ where: { id: popupId, shop }, select: { id: true } });
   if (!popup) return { ok: false, error: "Unknown popup." };
   const customerId = customerGid(loggedInCustomerId);
   const now = new Date().toISOString();
   const current = await readCustomerState(admin, customerId);
-  const state = mergeState(current, popupId, event === "shown" ? { lastShown: now } : { dismissedAt: now });
+  const state = mergeState(current, popupId, { dismissedAt: now });
   await writeCustomerState(admin, customerId, state);
   return { ok: true, state, message: "Saved." };
 }

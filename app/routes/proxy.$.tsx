@@ -10,12 +10,15 @@ import { verifyPreviewToken } from "../popup/preview-token.server";
 import { getShopSettings } from "../popup/settings.server";
 import { authenticate } from "../shopify.server";
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, cacheControl = "no-store"): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: { "Content-Type": "application/json", "Cache-Control": cacheControl },
   });
 }
+
+// The manifest is identical for every visitor of a shop, so browsers may reuse it briefly.
+const MANIFEST_CACHE = "public, max-age=60";
 
 async function proxyContext(request: Request) {
   const context = await authenticate.public.appProxy(request);
@@ -38,9 +41,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       where: { shop: context.session.shop },
       select: { manifest: true },
     });
-    if (!publication?.manifest) return json(parseManifest(null));
+    if (!publication?.manifest) return json(parseManifest(null), 200, MANIFEST_CACHE);
     try {
-      return json(parseManifest(publication.manifest));
+      return json(parseManifest(publication.manifest), 200, MANIFEST_CACHE);
     } catch {
       return json({ ok: false, error: "Stored manifest is invalid." }, 500);
     }
@@ -101,9 +104,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     return json(result, result.ok ? 200 : 400);
   } catch (error) {
-    return json(
-      { ok: false, error: error instanceof Error ? error.message : "The popup could not be saved." },
-      500,
-    );
+    console.error("Leaf Popups proxy action failed", error);
+    return json({ ok: false, error: "The popup could not be saved. Please try again." }, 500);
   }
 };

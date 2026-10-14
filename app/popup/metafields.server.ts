@@ -81,16 +81,23 @@ export async function ensureMetafieldDefinitions(admin: AdminClient): Promise<vo
   await createDefinition(admin, "SHOP", SHOP_MANIFEST_KEY, "Leaf Popups manifest");
 }
 
-export async function shopGid(admin: AdminClient): Promise<string> {
+// A shop's GID never changes, so look it up once per process.
+const shopGids = new Map<string, string>();
+
+export async function shopGid(admin: AdminClient, shop: string): Promise<string> {
+  const cached = shopGids.get(shop);
+  if (cached) return cached;
   const data = await adminGraphql<{ shop: { id: string } }>(admin, SHOP_ID);
+  shopGids.set(shop, data.shop.id);
   return data.shop.id;
 }
 
 export async function writeShopManifest(
   admin: AdminClient,
+  shop: string,
   manifest: Manifest,
 ): Promise<void> {
-  const ownerId = await shopGid(admin);
+  const ownerId = await shopGid(admin, shop);
   const data = await adminGraphql<{
     metafieldsSet: { userErrors: { message: string }[] };
   }>(admin, METAFIELDS_SET, {
@@ -123,6 +130,25 @@ export async function readCustomerState(
     codes: parsed.codes ?? {},
     consent: parsed.consent,
   };
+}
+
+const METAFIELDS_DELETE = `#graphql
+  mutation LeafPopupsMetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+    metafieldsDelete(metafields: $metafields) {
+      deletedMetafields { key }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function deleteCustomerState(admin: AdminClient, customerId: string): Promise<void> {
+  const data = await adminGraphql<{
+    metafieldsDelete: { userErrors: { message: string }[] };
+  }>(admin, METAFIELDS_DELETE, {
+    metafields: [{ ownerId: customerId, namespace: NAMESPACE, key: CUSTOMER_STATE_KEY }],
+  });
+  const error = formatUserErrors(data.metafieldsDelete.userErrors);
+  if (error) throw new Error(error);
 }
 
 export async function writeCustomerState(
