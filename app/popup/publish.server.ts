@@ -82,8 +82,13 @@ export async function syncManifest(
     campaigns,
   };
   try {
-    await ensureMetafieldDefinitions(admin);
-    await writeShopManifest(admin, manifest);
+    try {
+      await writeShopManifest(admin, shop, manifest);
+    } catch {
+      // Definitions are created at install; recreate them only if the write failed (e.g. a merchant deleted one).
+      await ensureMetafieldDefinitions(admin);
+      await writeShopManifest(admin, shop, manifest);
+    }
     await prisma.publication.upsert({
       where: { shop },
       create: { shop, manifest: JSON.stringify(manifest), syncStatus: "synced", error: null, syncedAt: new Date() },

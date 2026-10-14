@@ -155,19 +155,18 @@ export function parseAnalyticsRange(value: string | null): AnalyticsRange {
 }
 
 export async function recordPopupStat(shop: string, popupId: string, event: StatEvent): Promise<void> {
-  const popup = await prisma.popup.findFirst({
-    where: { id: popupId, shop, status: "published" },
-    select: { id: true, testId: true },
-  });
-  if (!popup) return;
-  let testId = "";
-  if (popup.testId) {
-    const test = await prisma.popupTest.findFirst({
-      where: { id: popup.testId, shop, status: "running" },
+  const [popup, test] = await Promise.all([
+    prisma.popup.findFirst({
+      where: { id: popupId, shop, status: "published" },
+      select: { testId: true },
+    }),
+    prisma.popupTest.findFirst({
+      where: { shop, status: "running", OR: [{ variantAId: popupId }, { variantBId: popupId }] },
       select: { id: true },
-    });
-    if (test) testId = test.id;
-  }
+    }),
+  ]);
+  if (!popup) return;
+  const testId = test && test.id === popup.testId ? test.id : "";
   const day = utcDay();
   await prisma.popupDailyStat.upsert({
     where: { shop_popupId_day_testId: { shop, popupId, day, testId } },
