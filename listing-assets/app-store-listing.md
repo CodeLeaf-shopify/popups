@@ -171,7 +171,12 @@ Use the four files and alt text in `screenshots/README.md`.
 9. Start an A/B test, generate storefront interactions, and review the result under **Analytics**.
 10. Open **Settings** to test pause, audience, path exclusion, conflict, and default-style controls.
 
-No external service credentials are required.
+No login or test credentials are needed. The app signs in through Shopify OAuth when it is installed, and every feature is reached from the Shopify admin. The Pro plan is chosen on Shopify's hosted plan page under **Plans**. Development stores subscribe at no charge.
+
+### Listing form settings
+
+- Sales channel requirements: select **Merchant must have online store**. Popups render through a theme app embed, so they need the Online Store channel.
+- Demo screencast (English): install → **Plans** → choose Pro → **Analytics** unlocked → **Popups** → create from blank and from a template → edit content and design → desktop/mobile preview → publish → **Enable Leaf Popups in the theme editor** and save → storefront trigger → submit a form → **Leads** → start an A/B test → **Analytics** → **Settings**.
 
 ## Data-access disclosure
 
