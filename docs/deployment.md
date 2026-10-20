@@ -1,13 +1,14 @@
 # Deploying Leaf Popups with Docker on a DigitalOcean droplet
 
 Production runs on a single DigitalOcean droplet with Docker Compose. The
-stack in `compose.yaml` has three services:
+stack in `compose.yaml` has two services, and the database is hosted on
+[Neon](https://neon.tech):
 
 | Service | What it does |
 | --- | --- |
 | `app` | Builds the React Router app from the `Dockerfile`, applies Prisma migrations on start, and serves on port 3000 inside the Docker network. |
-| `db` | PostgreSQL 16. Data lives in the `postgres_data` named volume. |
 | `caddy` | Terminates HTTPS on ports 80/443, gets a Let's Encrypt certificate for `APP_DOMAIN`, and proxies to `app`. Certificates live in the `caddy_data` volume. |
+| Neon (external) | Managed PostgreSQL. Use a dedicated production branch; the `development` branch is for local work. |
 
 Docker deploys only the web app. Shopify configuration (`shopify.app.toml`:
 URLs, scopes, webhooks, app proxy) and the theme app extension are deployed
@@ -17,7 +18,7 @@ Placeholders used below:
 
 - `APP_DOMAIN`: the public hostname, for example `leafpopups.codeleaf.co`.
 - `DROPLET_IP`: the droplet's public IPv4 address.
-- `YOUR_IP`: your own public IP, for SSH and database access.
+- `YOUR_IP`: your own public IP, for SSH access.
 
 ---
 
@@ -39,12 +40,8 @@ Placeholders used below:
    | HTTP | TCP | 80 | All IPv4, All IPv6 |
    | HTTPS | TCP | 443 | All IPv4, All IPv6 |
    | HTTP/3 | UDP | 443 | All IPv4, All IPv6 |
-   | PostgreSQL | TCP | 5432 | `YOUR_IP` only. Omit this rule if you don't need direct DB access. |
 
-   > Docker publishes ports by writing iptables rules directly, which bypasses
-   > `ufw` on the droplet. The DigitalOcean Cloud Firewall sits outside the
-   > droplet, so it is what actually protects port 5432. Never open 5432 to
-   > `0.0.0.0/0` or `::/0`.
+   The database is on Neon, so no database port is opened on the droplet.
 
 ## 2. Prepare the server
 
@@ -129,8 +126,8 @@ chmod 600 .env
 nano .env
 ```
 
-Fill in every value below. Generate the database password with
-`openssl rand -hex 32` so it is URL-safe.
+Fill in every value below. Copy both database strings from the Neon console
+(your production branch → **Connect** → **Prisma**).
 
 | Variable | Value |
 | --- | --- |
@@ -141,12 +138,8 @@ Fill in every value below. Generate the database password with
 | `SCOPES` | `read_customers,read_discounts,write_customers,write_discounts,write_files`. Must match `shopify.app.toml`. |
 | `NODE_ENV` | `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` |
-| `POSTGRES_DB` | e.g. `leaf_popups` |
-| `POSTGRES_USER` | e.g. `leaf_popups` |
-| `POSTGRES_PASSWORD` | The generated password. |
-| `DATABASE_URL` | `postgresql://POSTGRES_USER:POSTGRES_PASSWORD@db:5432/POSTGRES_DB?schema=public`. The host must be `db`. |
-| `POSTGRES_BIND_ADDRESS` | `127.0.0.1` keeps Postgres off the internet; connect over an SSH tunnel. Use `0.0.0.0` only together with the firewall rule from step 1. |
-| `POSTGRES_PORT` | `5432` |
+| `DATABASE_URL` | Neon **pooled** connection string (host contains `-pooler`), with `?sslmode=require`. Used by the app at runtime. |
+| `DIRECT_URL` | Neon **direct** connection string (same host without `-pooler`). Used by `prisma migrate deploy`. |
 | `SHOPIFY_PARTNER_ORG_ID` | The number in your Partner Dashboard URL: `partners.shopify.com/<ORG_ID>/…`. |
 | `SHOPIFY_PARTNER_API_ACCESS_TOKEN` | Partner Dashboard → Settings → Partner API clients → create a client with **Manage apps** permission. |
 | `SHOPIFY_APP_GID` | `gid://shopify/App/<APP_ID>`, where `<APP_ID>` is the number in the app's Partner Dashboard URL. |
@@ -166,7 +159,7 @@ docker compose up -d --build
 The first build takes a few minutes. Then verify:
 
 ```bash
-docker compose ps                          # all three services "running"; app and db "healthy"
+docker compose ps                          # both services "running"; app "healthy"
 docker compose logs -f app                 # expect "prisma migrate deploy" output, then the server listening on 3000
 docker compose logs caddy | grep -i certificate   # expect "certificate obtained successfully"
 curl -fsS https://APP_DOMAIN/health         # prints: ok
@@ -234,8 +227,8 @@ changes `shopify.app.toml` or `extensions/`, also run `npm run deploy` from
 your development machine (step 7).
 
 **Rollback:** `git checkout <previous-commit> && docker compose up -d --build`.
-Prisma migrations don't roll back automatically, so restore a backup if a
-migration has to be undone.
+Prisma migrations don't roll back automatically, so restore the Neon branch to
+a point in time before the migration if one has to be undone.
 
 ## Operations
 
@@ -249,40 +242,25 @@ docker compose up -d                        # re-apply .env changes to all servi
 After you edit `.env`, use `docker compose up -d`, not `restart`. `restart`
 doesn't reload environment variables.
 
-The `postgres_data` and `caddy_data` volumes survive rebuilds and
-`docker compose down`. **Never run `docker compose down --volumes`** unless you
-mean to delete every shop's data and the TLS certificates.
+The `caddy_data` volume survives rebuilds and `docker compose down`.
+`docker compose down --volumes` deletes the TLS certificates (shop data lives in
+Neon and is not affected).
 
 ### Database access
 
-Connect from TablePlus or psql over an SSH tunnel (works with
-`POSTGRES_BIND_ADDRESS=127.0.0.1`):
-
-- **SSH:** `deploy@DROPLET_IP` with your key.
-- **Database host:** `127.0.0.1`, port `5432`, using `POSTGRES_DB`,
-  `POSTGRES_USER` and `POSTGRES_PASSWORD`.
-
-If you expose 5432 directly instead, the connection works only from the IP
-allowed in the Cloud Firewall, and it isn't TLS-encrypted.
+Use the Neon console's SQL editor, or connect from TablePlus/psql with the
+`DIRECT_URL` connection string. Connections are TLS-encrypted.
 
 ### Backups
 
-Create a compressed logical backup:
+Neon keeps a history of every branch, so you can restore a branch to any point
+inside your plan's restore window (Neon console → **Backup & Restore**).
+Before risky migrations, create a branch from production as a snapshot.
+
+For an off-site copy, take a logical dump with the direct URL:
 
 ```bash
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > leaf-popups-$(date +%F).dump
-```
-
-Copy backups off the droplet (for example to DigitalOcean Spaces) and test
-restores regularly. Droplet backups and snapshots are extra protection, not a
-substitute for database dumps.
-
-Restore into the existing database:
-
-```bash
-docker compose stop app
-docker compose exec -T db sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < leaf-popups-YYYY-MM-DD.dump
-docker compose start app
+pg_dump "$DIRECT_URL" -Fc > leaf-popups-$(date +%F).dump
 ```
 
 ## Troubleshooting
@@ -291,7 +269,7 @@ docker compose start app
 | --- | --- |
 | Caddy logs show certificate errors | DNS doesn't point at the droplet yet, ports 80/443 are closed in the Cloud Firewall, or the Cloudflare record is proxied before the first certificate was issued. |
 | Cloudflare error 526 | SSL/TLS mode is Full (strict) but Caddy has no valid certificate yet. Set the record to DNS-only until Caddy has one. |
-| `app` keeps restarting | Check `docker compose logs app`. It's usually a wrong `DATABASE_URL` (the host must be `db`) or a missing `SHOPIFY_API_SECRET`. |
+| `app` keeps restarting | Check `docker compose logs app`. It's usually a wrong `DATABASE_URL`/`DIRECT_URL` (check the Neon strings and `sslmode=require`) or a missing `SHOPIFY_API_SECRET`. |
 | Build killed / exit code 137 | The droplet ran out of memory. Add swap (step 2.4) or resize. |
 | Pro merchants see Free features | Partner API variables are missing or wrong. Check `docker compose logs app \| grep -i "plan"`. |
 | Popups don't appear on the storefront | The theme extension wasn't deployed (`npm run deploy`), or the merchant didn't save the theme after enabling the embed. |

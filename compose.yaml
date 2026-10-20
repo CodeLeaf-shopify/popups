@@ -1,29 +1,6 @@
 name: leaf-popups
 
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
-      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
-    ports:
-      - "${POSTGRES_BIND_ADDRESS:-0.0.0.0}:${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - backend
-
   app:
     build:
       context: .
@@ -33,12 +10,10 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      DIRECT_URL: ${DIRECT_URL:?Set DIRECT_URL in .env}
       HOST: 0.0.0.0
       PORT: 3000
       NODE_ENV: production
-    depends_on:
-      db:
-        condition: service_healthy
     expose:
       - "3000"
     healthcheck:
@@ -52,7 +27,6 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - backend
       - frontend
 
   caddy:
@@ -75,10 +49,8 @@ services:
       - frontend
 
 networks:
-  backend:
   frontend:
 
 volumes:
-  postgres_data:
   caddy_data:
   caddy_config:
