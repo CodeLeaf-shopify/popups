@@ -28,6 +28,7 @@ RUN npm ci --omit=dev \
   && npm cache clean --force
 
 COPY --from=build /app/build ./build
+COPY extensions/leaf-popups-embed/assets ./extensions/leaf-popups-embed/assets
 
 EXPOSE 3000
 

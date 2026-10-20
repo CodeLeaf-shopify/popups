@@ -23,6 +23,14 @@ const SHOP_PLAN_QUERY = `#graphql
   }
 `;
 
+const ACTIVE_SUBSCRIPTIONS_QUERY = `#graphql
+  query LeafPopupsActiveSubscriptions {
+    currentAppInstallation {
+      activeSubscriptions { name status }
+    }
+  }
+`;
+
 export type PlanSnapshot = {
   plan: ShopPlan;
   unpublished: string[];
@@ -56,9 +64,39 @@ async function shopGid(admin: AdminClient): Promise<string> {
   return data.shop.id;
 }
 
+async function planFromAdmin(admin: AdminClient): Promise<ShopPlan> {
+  const data = await adminGraphql<{
+    currentAppInstallation: { activeSubscriptions: { name: string; status: string }[] };
+  }>(admin, ACTIVE_SUBSCRIPTIONS_QUERY);
+  const pro = data.currentAppInstallation.activeSubscriptions.some(
+    (subscription) => subscription.status === "ACTIVE" && /\bpro\b/i.test(subscription.name),
+  );
+  return pro ? "pro" : "free";
+}
+
+// The Partner API is Shopify's source of truth for App Pricing; the Admin API covers shops it misses
+// (missing credentials, API errors, or subscriptions it doesn't report yet).
+async function resolvePlan(admin: AdminClient, shop: string): Promise<ShopPlan> {
+  if (partnerApiConfigured()) {
+    try {
+      const plan = planFromSubscription(await fetchActiveSubscription(await shopGid(admin)));
+      if (plan === "pro") {
+        console.info(`Leaf Popups plan for ${shop}: pro (Partner API)`);
+        return plan;
+      }
+    } catch (error) {
+      console.error(`Partner API plan check failed for ${shop}`, error);
+    }
+  } else {
+    console.warn("Shopify Partner API credentials are not configured; checking the plan through the Admin API.");
+  }
+  const plan = await planFromAdmin(admin);
+  console.info(`Leaf Popups plan for ${shop}: ${plan} (Admin API)`);
+  return plan;
+}
+
 export async function syncPlanFromAdmin(admin: AdminClient, shop: string): Promise<PlanSnapshot> {
-  const subscription = await fetchActiveSubscription(await shopGid(admin));
-  const plan: ShopPlan = planFromSubscription(subscription);
+  const plan = await resolvePlan(admin, shop);
   const existing = await prisma.shopBilling.findUnique({ where: { shop } });
   const unpublishedNames = plan === "pro" ? "[]" : (existing?.unpublishedNames ?? "[]");
   const row = await prisma.shopBilling.upsert({
@@ -93,8 +131,6 @@ export async function getShopPlan(
   let refreshed = Boolean(options?.force) || cached == null;
   if (cached && fresh && !options?.force) {
     current = snapshot(cached);
-  } else if (!partnerApiConfigured()) {
-    current = cached ? snapshot(cached) : { plan: "free", unpublished: [] };
   } else {
     try {
       current = await syncPlanFromAdmin(admin, shop);
