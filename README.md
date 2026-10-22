@@ -84,7 +84,9 @@ Never commit real credentials.
 1. Open Leaf Popups in Shopify admin.
 2. Create a popup from a preset and edit its content, layout, and behavior.
 3. Save the draft, preview it, and publish it.
-4. Use **Enable app embed** from the app home page and save the theme.
+4. Use **Enable Leaf Popups in the theme editor** from the app home page or
+   Settings, confirm the **Leaf Popups** toggle is on, and click **Save** in
+   the theme editor.
 
 The app embed is enabled once per theme. Individual popup availability is
 controlled by the published manifest, not by adding separate theme blocks.

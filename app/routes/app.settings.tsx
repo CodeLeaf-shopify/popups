@@ -3,6 +3,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { EmbedSetupGuide } from "../components/EmbedSetupGuide";
 import { ColorTokenField, NumberInput } from "../components/PropertyPanel";
 import { isConflictMode, parsePathList, parseTokens } from "../popup/parse";
 import { republishAll, syncManifest } from "../popup/publish.server";
@@ -120,12 +121,7 @@ export default function SettingsPage() {
             />
             <s-stack direction="block" gap="small-200">
               <s-heading>Theme embed</s-heading>
-              <s-paragraph>
-                Popups render through one theme app embed. Turn it on once, then every published popup uses it.
-              </s-paragraph>
-              <s-link href={embedUrl} target="_blank">
-                Enable Leaf Popups in the theme editor
-              </s-link>
+              <EmbedSetupGuide embedUrl={embedUrl} />
             </s-stack>
           </s-stack>
         </s-section>

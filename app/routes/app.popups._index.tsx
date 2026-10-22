@@ -8,6 +8,7 @@ import { parseBehavior } from "../popup/parse";
 import { FREE_PUBLISHED_LIMIT } from "../popup/plans";
 import { createFromTemplate, isTemplateId, TEMPLATES, type TemplateId } from "../popup/presets";
 import { setPopupStatus } from "../popup/publish.server";
+import { EmbedSetupGuide } from "../components/EmbedSetupGuide";
 import { EMBED_HANDLE, type PopupStatus } from "../popup/types";
 import { authenticate } from "../shopify.server";
 
@@ -171,12 +172,7 @@ export default function PopupsIndex() {
           </s-banner>
         ) : null}
         <s-section heading="Theme embed">
-          <s-paragraph>
-            Popups render through one theme app embed. Turn it on once, then every published popup uses it.
-          </s-paragraph>
-          <s-link href={embedUrl} target="_blank">
-            Enable Leaf Popups in the theme editor
-          </s-link>
+          <EmbedSetupGuide embedUrl={embedUrl} />
         </s-section>
         <s-section heading="Active popups">
           {plan === "free" ? (
