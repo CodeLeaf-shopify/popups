@@ -135,7 +135,7 @@ Fill in every value below. Copy both database strings from the Neon console
 | `SHOPIFY_APP_URL` | `https://leafpopups.codeleaf.co`. Must match `application_url` in `shopify.app.toml`. |
 | `SHOPIFY_API_KEY` | Client ID. Same as `client_id` in `shopify.app.toml`. |
 | `SHOPIFY_API_SECRET` | Client secret from Partner Dashboard → Apps → Leaf Popups → Client credentials. |
-| `SCOPES` | `read_customers,read_discounts,write_customers,write_discounts,write_files`. Must match `shopify.app.toml`. |
+| `SCOPES` | `read_customers,read_discounts,write_customers,write_discounts,write_files,read_themes`. Must match `shopify.app.toml`. |
 | `NODE_ENV` | `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` |
 | `DATABASE_URL` | Neon **pooled** connection string (host contains `-pooler`), with `?sslmode=require`. Used by the app at runtime. |

@@ -9,7 +9,7 @@ import { isConflictMode, parsePathList, parseTokens } from "../popup/parse";
 import { republishAll, syncManifest } from "../popup/publish.server";
 import { getShopSettings, saveShopSettings } from "../popup/settings.server";
 import { stableStringify } from "../popup/stable-stringify";
-import { EMBED_HANDLE, type ConflictMode, type ShopSettings, type Tokens } from "../popup/types";
+import { type ConflictMode, type ShopSettings, type Tokens } from "../popup/types";
 import { authenticate } from "../shopify.server";
 
 type SettingsResponse = { ok: true; settings: ShopSettings; warning?: string } | { ok: false; error: string };
@@ -75,7 +75,6 @@ export default function SettingsPage() {
   const fetcher = useFetcher<typeof action>();
   const [settings, setSettings] = useState<ShopSettings>(initial);
   const [excludeText, setExcludeText] = useState(initial.exclude.join("\n"));
-  const embedUrl = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${apiKey}/${EMBED_HANDLE}`;
   const saving = fetcher.state !== "idle";
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
   const selectedMode = CONFLICT_MODES.find((mode) => mode.value === settings.conflictMode) ?? CONFLICT_MODES[0];
@@ -121,7 +120,7 @@ export default function SettingsPage() {
             />
             <s-stack direction="block" gap="small-200">
               <s-heading>Theme embed</s-heading>
-              <EmbedSetupGuide embedUrl={embedUrl} />
+              <EmbedSetupGuide />
             </s-stack>
           </s-stack>
         </s-section>

@@ -9,7 +9,7 @@ import { FREE_PUBLISHED_LIMIT } from "../popup/plans";
 import { createFromTemplate, isTemplateId, TEMPLATES, type TemplateId } from "../popup/presets";
 import { setPopupStatus } from "../popup/publish.server";
 import { EmbedSetupGuide } from "../components/EmbedSetupGuide";
-import { EMBED_HANDLE, type PopupStatus } from "../popup/types";
+import { type PopupStatus } from "../popup/types";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -82,7 +82,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function PopupsIndex() {
   const { shop, apiKey, popups, publicationError, plan, unpublished } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const embedUrl = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${apiKey}/${EMBED_HANDLE}`;
   const activePopups = popups.filter((popup) => popup.status !== "archived");
   const publishedCount = popups.filter((popup) => popup.status === "published").length;
   const archivedPopups = popups.filter((popup) => popup.status === "archived");
@@ -172,7 +171,7 @@ export default function PopupsIndex() {
           </s-banner>
         ) : null}
         <s-section heading="Theme embed">
-          <EmbedSetupGuide embedUrl={embedUrl} />
+          <EmbedSetupGuide />
         </s-section>
         <s-section heading="Active popups">
           {plan === "free" ? (

@@ -21,6 +21,7 @@ export default function App() {
         <s-link href="/app" {...{ rel: "home" }}>
           Home
         </s-link>
+        <s-link href="/app/setup">Setup</s-link>
         <s-link href="/app/popups">Popups</s-link>
         <s-link href="/app/stats">Analytics</s-link>
         <s-link href="/app/leads">Leads</s-link>
