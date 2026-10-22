@@ -29,7 +29,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const SCREENSHOT = {
   src: "/onboarding/app-embeds.jpg",
-  alt: "The App embeds panel in the Shopify theme editor with the Leaf Popups toggle switched on and a popup showing in the storefront preview. The Save button is in the top right.",
+  alt: "The App embeds panel in the Shopify theme editor with the Popups embed toggle switched on and a popup showing in the storefront preview. The Save button is in the top right.",
 };
 
 // Template names a theme app embed can render on. The embed targets the page body, so
@@ -129,7 +129,7 @@ export default function SetupPage() {
           </s-ordered-list>
           <s-image src={SCREENSHOT.src} alt={SCREENSHOT.alt} borderRadius="base" border="base" />
           <s-text color="subdued">
-            The App embeds panel with Leaf Popups switched on. The preview shows a published popup. Click Save, top
+            The App embeds panel with the Popups embed switched on. The preview shows a published popup. Click Save, top
             right, to make it live.
           </s-text>
         </s-stack>
