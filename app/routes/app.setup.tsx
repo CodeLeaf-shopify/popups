@@ -119,7 +119,7 @@ export default function SetupPage() {
               four squares).
             </s-list-item>
             <s-list-item>
-              Find <s-text type="strong">Leaf Popups</s-text> and make sure its toggle is{" "}
+              Find <s-text type="strong">Popups embed</s-text> (listed under Leaf Popups) and make sure its toggle is{" "}
               <s-text type="strong">on</s-text>. To stop popups on this theme, switch the toggle off.
             </s-list-item>
             <s-list-item>
