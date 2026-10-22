@@ -1,13 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "6d493493491df9358102bd36e5128e27"
+name = "Leaf Popups"
 application_url = "https://leafpopups.codeleaf.co"
 embedded = true
-name = "Leaf Popups"
 
-[access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_customers,write_customers,read_discounts,write_discounts,write_files"
+[build]
+automatically_update_urls_on_dev = true
 
 [webhooks]
 api_version = "2026-10"
@@ -15,10 +14,6 @@ api_version = "2026-10"
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/subscriptions_update"
@@ -36,13 +31,18 @@ api_version = "2026-10"
   uri = "/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
-[app_proxy]
-url = "/proxy"
-subpath = "leaf-popups"
-prefix = "apps"
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_discounts,write_customers,write_discounts,write_files"
 
 [auth]
 redirect_urls = [ "https://leafpopups.codeleaf.co/api/auth" ]
 
-[build]
-automatically_update_urls_on_dev = true
+[app_proxy]
+url = "https://leafpopups.codeleaf.co/proxy"
+subpath = "leaf-popups"
+prefix = "apps"

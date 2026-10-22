@@ -25,7 +25,7 @@ contracts shared by the builder, preview, and storefront renderer.
 
 - Node.js `>=20.19 <22` or `>=22.12`
 - npm
-- PostgreSQL 16 or Docker
+- A PostgreSQL database (Neon in development and production)
 - A Shopify Partner account and development store
 - Shopify CLI
 
@@ -43,8 +43,9 @@ contracts shared by the builder, preview, and storefront renderer.
    npm run config:link
    ```
 
-3. Set `DATABASE_URL` to a PostgreSQL database, then generate the Prisma
-   client and apply migrations:
+3. Set `DATABASE_URL` (Neon pooled connection) and `DIRECT_URL` (Neon direct
+   connection, used for migrations) in `.env`, then generate the Prisma client
+   and apply migrations:
 
    ```shell
    npm run setup
@@ -70,11 +71,9 @@ Never commit real credentials.
 - `SHOPIFY_APP_URL` — public HTTPS origin for the web app
 - `SCOPES` — comma-separated scopes matching `shopify.app.toml`
 - `SHOP_CUSTOM_DOMAIN` — optional custom shop domain
-- `DATABASE_URL` — PostgreSQL connection string; use host `db` inside Compose
-- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` — credentials used to
-  initialize the Compose database
-- `POSTGRES_BIND_ADDRESS`, `POSTGRES_PORT` — host listener used by database
-  administration tools
+- `DATABASE_URL` — Neon pooled connection string (host contains `-pooler`)
+  used by the app
+- `DIRECT_URL` — Neon direct connection string used by Prisma migrations
 - `APP_DOMAIN` — hostname served by Caddy, without a URL scheme
 - `HOST`, `PORT` — production server bind address and port
 - `NODE_ENV` — set to `production` in production
@@ -105,7 +104,8 @@ npm run deploy       # Deploy Shopify app configuration and extensions
 ## Deployment
 
 Production runs with Docker Compose on a DigitalOcean droplet: `app` (React
-Router + Prisma migrations), `db` (PostgreSQL 16), and `caddy` (HTTPS).
+Router + Prisma migrations) and `caddy` (HTTPS). The database is hosted on
+Neon.
 Shopify configuration and the theme extension ship separately with
 `npm run deploy`.
 
@@ -134,7 +134,7 @@ git pull && docker compose up -d --build
 ### Prisma tables do not exist
 
 Run `npm run setup`. In deployment environments, make sure the service can
-connect to `DATABASE_URL` before starting the app.
+connect to `DATABASE_URL` and `DIRECT_URL` before starting the app.
 
 ### Embedded navigation loses the session
 

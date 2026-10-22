@@ -148,15 +148,14 @@ short-lived token and never publish the draft.
 
 ## Operational constraints
 
-- The production Compose stack uses PostgreSQL 16 with a named volume. Prisma
-  migrations run before the application server starts.
-- PostgreSQL port 5432 is published for administration and must be restricted
-  to explicit source IPs by the DigitalOcean Cloud Firewall. The application
-  connects over the private Compose network.
+- The database is Neon-managed PostgreSQL. The app connects through Neon's
+  pooled endpoint (`DATABASE_URL`) over TLS; Prisma migrations use the direct
+  endpoint (`DIRECT_URL`) and run before the application server starts.
+- Production and development use separate Neon branches.
 - Caddy terminates origin HTTPS and proxies to the private application port.
   Cloudflare should use a proxied DNS record with Full (strict) SSL mode.
-- Database backups must be copied off the droplet; container volumes and
-  droplet snapshots are not sufficient as the only backup.
+- Neon point-in-time restore covers routine recovery; take periodic
+  `pg_dump` copies for an off-site backup.
 - The app embed must be deployed and enabled in the merchant's theme.
 - The leads workflow requires protected customer data approval before App Store
   distribution.

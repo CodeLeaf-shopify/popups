@@ -9,7 +9,7 @@ privacy requirements. Not legal advice.
 | --- | --- | --- |
 | Customer email, name (via Admin API) | Shopify customers | Lead capture display |
 | Consent + engagement + unique codes | Shopify customer metafield `leaf_popups.state` | Frequency, consent, discounts |
-| Merchant designs, sessions, settings, aggregated stats | App PostgreSQL (Prisma) | Operate the App |
+| Merchant designs, sessions, settings, aggregated stats | App PostgreSQL on Neon (Prisma) | Operate the App |
 
 We do **not** keep a separate customer email database in Prisma.
 
@@ -22,10 +22,10 @@ We do **not** keep a separate customer email database in Prisma.
 ## Security posture (production)
 
 - TLS terminated at the edge (Caddy / Cloudflare Full strict); app traffic over HTTPS.
-- Postgres on the private Compose network; admin port firewalled.
-- Separate development stores and databases from production.
+- Postgres hosted on Neon; connections require TLS and no database port is exposed on the droplet.
+- Separate development stores and Neon branches from production.
 - Staff access to hosting, Partner Dashboard, and DB limited to operators who need it; strong passwords / SSO where available.
-- Backups: copy Postgres backups off the droplet (see `docs/architecture.md`); treat backup volumes as encrypted/restricted at rest where the host supports it.
+- Backups: Neon point-in-time restore plus periodic off-site `pg_dump` copies (see `docs/deployment.md`); treat dump files as restricted.
 - Incident response: report suspected incidents to `support@codeleaf.co`; revoke credentials, rotate secrets, contain access, notify affected merchants when required, and document timeline / remediation.
 
 ## Compliance webhooks
